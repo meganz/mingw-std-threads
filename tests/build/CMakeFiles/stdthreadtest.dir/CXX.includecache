@@ -1,0 +1,14 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+D:/devel/CURRENT/stdthreads/tests/tests.cpp
+../win32stdthread.h
+D:/devel/CURRENT/stdthreads/tests/../win32stdthread.h
+../win32stdmutex.h
+D:/devel/CURRENT/stdthreads/tests/../win32stdmutex.h
+
