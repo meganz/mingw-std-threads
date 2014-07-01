@@ -112,9 +112,37 @@ public:
         if (!ReleaseMutex(mHandle))
             throw system_error(EDEADLK, generic_category());
     }
-    void try_lock()
+    bool try_lock()
     {
+        DWORD ret = WaitForSingleObject(mHandle, 0);
+        if (ret == WAIT_TIMEOUT)
+            return false;
+        else if (ret == WAIT_OBJECT_0)
+            return true;
+        else if (ret == WAIT_ABANDONED)
+            throw system_error(EOWNERDEAD, generic_category());
+        else
+            throw system_error(EPROTO, generic_category());
+    }
+    template <class Rep, class Period>
+    bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
+    {
+        DWORD timeout = (DWORD)chrono::duration_cast<chrono::milliseconds>(dur).count();
 
+        DWORD ret = WaitForSingleObject(mHandle, timeout);
+        if (ret == WAIT_TIMEOUT)
+            return false;
+        else if (ret == WAIT_OBJECT_0)
+            return true;
+        else if (ret == WAIT_ABANDONED)
+            throw system_error(EOWNERDEAD, generic_category());
+        else
+            throw system_error(EPROTO, generic_category());
+    }
+    template <class Clock, class Duration>
+    bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
+    {
+        return try_lock_for(timeout_time - Clock::now());
     }
 };
 }
