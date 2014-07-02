@@ -18,7 +18,7 @@ public:
     condition_variable& operator=(const condition_variable&) = delete;
     condition_variable()
         :mNumWaiters(0), mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
-         mWakeEvent(CreateEvent(NULL, TRUE, FALSE, NULL))
+         mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL))
     {}
     ~condition_variable() {  CloseHandle(mWakeEvent); CloseHandle(mSemaphore);  }
     void wait(std::unique_lock<std::mutex>& lock)
@@ -50,7 +50,7 @@ public:
     void notify_all() noexcept
     {
         lock_guard<recursive_mutex> lock(mMutex);
-        if (!mNumWaiters)
+        if (mNumWaiters.load() <= 0)
             return;
 
         ReleaseSemaphore(mSemaphore, mNumWaiters, NULL);
@@ -60,12 +60,8 @@ public:
             if ((ret == WAIT_FAILED) || (ret == WAIT_ABANDONED))
                 throw system_error(EPROTO, generic_category());
         }
-#ifndef NDEBUG
         assert(mNumWaiters == 0);
-        long semCount;
-        ReleaseSemaphore(mSemaphore, 0, &semCount);
-        assert(semCount == 0xFFFF);
-#endif
+        assert((WaitForSingleObject(mSemaphore, 0) == WAIT_TIMEOUT));
     }
     void notify_one() noexcept
     {

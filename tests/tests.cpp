@@ -1,40 +1,62 @@
 #include "../mingw.thread.h"
 #include <mutex>
 #include "../mingw.mutex.h"
-#include "../mingw.conditional_variable.h"
+#include "../mingw.condition_variable.h"
 #include <atomic>
 using namespace std;
 
+bool cond = false;
+std::mutex m;
+std::condition_variable cv;
+
 int main()
 {
-    std::timed_mutex m;
-    std::thread t([&m](int a, const char* b, int c)mutable
+
+    std::thread t([](int a, const char* b, int c)mutable
     {
-       printf("Thread started: arg = %d, %s, %d\n", a, b, c);
-       fflush(stdout);
-       m.lock();
-       this_thread::sleep_for(std::chrono::milliseconds(5000));
-       m.unlock();
-       this_thread::sleep_for(std::chrono::milliseconds(5000));
+      try
+      {
+  //     printf("Thread started: arg = %d, %s, %d\n", a, b, c);
+  //     fflush(stdout);
+     this_thread::sleep_for(std::chrono::milliseconds(5000));
+       {
+        lock_guard<mutex> lock(m);
+        cond = true;
+        cv.notify_all();
+       }
        printf("thread finished\n");
        fflush(stdout);
-
+      }
+      catch(std::exception& e)
+      {
+        printf("EXCEPTION in thread: %s\n", e.what());
+      }
     },
     1, "test message", 3);
-    this_thread::sleep_for(std::chrono::milliseconds(1));
-    printf("trylock: %d\n", m.try_lock());
+try
+{
+//    printf("trylock: %d\n", m.try_lock());
+//    fflush(stdout);
+    printf("condvar waiting\n");
     fflush(stdout);
-    printf("mutex waiting\n");
+    {
+        std::unique_lock<mutex> lk(m);
+        cv.wait(lk, []{ return cond;} );
+        printf("condvar notified, cond = %d\n", cond);
+        fflush(stdout);
+    }
+    printf("waiting for thread to terminate\n");
     fflush(stdout);
 
-    std::atomic_int a(1);
-    a++;
-
-    printf("join waiting\n");
-    fflush(stdout);
     t.join();
     printf("join complete\n");
     fflush(stdout);
+}
+catch(std::exception& e)
+{
+    printf("EXCEPTION in main thread: %s\n", e.what());
+}
+
     return 0;
 }
 

@@ -65,14 +65,22 @@ protected:
     {
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread == self)
+        {
+            fprintf(stderr, "FATAL: Recursive locking or non-recursive mutex detected. Throwing sysetm exception\n");
+            fflush(stderr);
             throw system_error(EDEADLK, generic_category());
+        }
         mOwnerThread = self;
     }
     void checkSetOwnerBeforeUnlock()
     {
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread != self)
+        {
+            fprintf(stderr, "FATAL: Recursive unlocking of non-recursive mutex detected. Throwing system exception\n");
+            fflush(stderr);
             throw system_error(EDEADLK, generic_category());
+        }
         mOwnerThread = 0;
     }
 public:
