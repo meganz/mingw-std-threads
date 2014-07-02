@@ -1,10 +1,13 @@
 #include "../mingw.thread.h"
+#include <mutex>
 #include "../mingw.mutex.h"
+#include "../mingw.conditional_variable.h"
+#include <atomic>
 using namespace std;
 
 int main()
 {
-    std::mutex m;
+    std::timed_mutex m;
     std::thread t([&m](int a, const char* b, int c)mutable
     {
        printf("Thread started: arg = %d, %s, %d\n", a, b, c);
@@ -23,7 +26,10 @@ int main()
     fflush(stdout);
     printf("mutex waiting\n");
     fflush(stdout);
-    m.lock();
+
+    std::atomic_int a(1);
+    a++;
+
     printf("join waiting\n");
     fflush(stdout);
     t.join();

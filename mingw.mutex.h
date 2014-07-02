@@ -1,5 +1,10 @@
 #ifndef WIN32STDMUTEX_H
 #define WIN32STDMUTEX_H
+
+#if !defined(STDTHREAD_STRICT_NONRECURSIVE_LOCKS) && !defined(NDEBUG)
+    #define STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+#endif
+
 namespace std
 {
 class recursive_mutex
@@ -31,57 +36,65 @@ public:
         return (TryEnterCriticalSection(&mHandle)!=0);
     }
 };
-
-class mutex: protected recursive_mutex
+template <class B>
+class _NonRecursiveMutex: protected B
 {
 protected:
-    typedef recursive_mutex base;
-#ifndef NDEBUG
+    typedef B base;
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
     DWORD mOwnerThread;
 #endif
 public:
     using base::native_handle_type;
     using base::native_handle;
-    mutex() noexcept :base()
-#ifndef NDEBUG
+    _NonRecursiveMutex() noexcept :base()
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
     , mOwnerThread(0)
 #endif
     {}
-    mutex (const mutex&) = delete;
+    _NonRecursiveMutex (const _NonRecursiveMutex<B>&) = delete;
     void lock()
     {
         base::lock();
-#ifndef NDEBUG
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+        checkSetOwnerAfterLock();
+#endif
+    }
+protected:
+    void checkSetOwnerAfterLock()
+    {
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread == self)
             throw system_error(EDEADLK, generic_category());
         mOwnerThread = self;
-#endif
     }
-    void unlock()
+    void checkSetOwnerBeforeUnlock()
     {
-#ifndef NDEBUG
-        if (mOwnerThread != GetCurrentThreadId())
+        DWORD self = GetCurrentThreadId();
+        if (mOwnerThread != self)
             throw system_error(EDEADLK, generic_category());
         mOwnerThread = 0;
+    }
+public:
+    void unlock()
+    {
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+        checkSetOwnerBeforeUnlock();
 #endif
         base::unlock();
     }
     bool try_lock()
     {
         bool ret = base::try_lock();
-#ifndef NDEBUG
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
         if (ret)
-        {
-            DWORD self = GetCurrentThreadId();
-            if (mOwnerThread == self)
-                throw system_error(EDEADLK, generic_category());
-            mOwnerThread = self;
-        }
+            checkSetOwnerAfterLock();
 #endif
         return ret;
     }
 };
+
+typedef _NonRecursiveMutex<recursive_mutex> mutex;
 
 class recursive_timed_mutex
 {
@@ -145,5 +158,67 @@ public:
         return try_lock_for(timeout_time - Clock::now());
     }
 };
+class timed_mutex: public _NonRecursiveMutex<recursive_timed_mutex>
+{
+protected:
+    typedef _NonRecursiveMutex<recursive_timed_mutex> base;
+public:
+    using base::base;
+    template <class Rep, class Period>
+    void try_lock_for(const std::chrono::duration<Rep,Period>& dur)
+    {
+        bool ret = base::try_lock_for(dur);
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+        if (ret)
+            checkSetOwnerAfterLock();
+#endif
+        return ret;
+    }
+public:
+    template <class Clock, class Duration>
+    bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
+    {
+        bool ret = base::try_lock_until(timeout_time);
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+        if (ret)
+            checkSetOwnerAfterLock();
+#endif
+        return ret;
+    }
+};
+// You can use the scoped locks and other helpers that are still provided by <mutex>
+// In that case, you must include <mutex> before inclusing this file, so that this
+// file will not try to redefine them
+#ifndef _GLIBCXX_MUTEX
+
+/// Do not acquire ownership of the mutex.
+struct defer_lock_t { };
+
+ /// Try to acquire ownership of the mutex without blocking.
+struct try_to_lock_t { };
+
+ /// Assume the calling thread has already obtained mutex ownership
+ /// and manage it.
+struct adopt_lock_t { };
+
+constexpr defer_lock_t	defer_lock { };
+constexpr try_to_lock_t	try_to_lock { };
+constexpr adopt_lock_t	adopt_lock { };
+
+template <class M>
+class lock_guard
+{
+protected:
+    M& mMutex;
+public:
+    typedef M mutex_type;
+    lock_guard(const lock_guard&) = delete;
+    lock_guard& operator=(const lock_guard&) = delete;
+    explicit lock_guard(mutex_type& m): mMutex(m) { mMutex.lock();  }
+    lock_guard(mutex_type& m, std::adopt_lock_t):mMutex(m){}
+    ~lock_guard() {  mMutex.unlock();   }
+};
+
+#endif
 }
 #endif // WIN32STDMUTEX_H
