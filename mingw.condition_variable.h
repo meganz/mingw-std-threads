@@ -7,7 +7,7 @@ namespace std
 {
 
 enum class cv_status { no_timeout, timeout };
-class condition_variable
+class condition_variable_any
 {
 protected:
     recursive_mutex mMutex;
@@ -17,15 +17,16 @@ protected:
 public:
     typedef HANDLE native_handle_type;
     native_handle_type native_handle() {return mSemaphore;}
-    condition_variable(const condition_variable&) = delete;
-    condition_variable& operator=(const condition_variable&) = delete;
-    condition_variable()
+    condition_variable_any(const condition_variable_any&) = delete;
+    condition_variable_any& operator=(const condition_variable_any&) = delete;
+    condition_variable_any()
         :mNumWaiters(0), mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
          mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL))
     {}
-    ~condition_variable() {  CloseHandle(mWakeEvent); CloseHandle(mSemaphore);  }
+    ~condition_variable_any() {  CloseHandle(mWakeEvent); CloseHandle(mSemaphore);  }
 protected:
-    bool wait_impl(std::unique_lock<std::mutex>& lock, DWORD timeout)
+    template <class M>
+    bool wait_impl(M& lock, DWORD timeout)
     {
         {
             lock_guard<recursive_mutex> guard(mMutex);
@@ -56,12 +57,13 @@ protected:
             throw system_error(EPROTO, generic_category());
     }
 public:
-    void wait(std::unique_lock<std::mutex>& lock)
+    template <class M>
+    void wait(M& lock)
     {
         wait_impl(lock, INFINITE);
     }
-    template <class Predicate>
-    void wait(std::unique_lock<std::mutex> &lock, Predicate pred)
+    template <class M, class Predicate>
+    void wait(M& lock, Predicate pred)
     {
         while(!pred())
         {
@@ -105,8 +107,8 @@ public:
         }
         assert(mNumWaiters == targetWaiters);
     }
-    template <class Rep, class Period>
-    std::cv_status wait_for( std::unique_lock<std::mutex>& lock,
+    template <class M, class Rep, class Period>
+    std::cv_status wait_for(M& lock,
       const std::chrono::duration<Rep, Period>& rel_time)
     {
         long long timeout = chrono::duration_cast<chrono::milliseconds>(rel_time).count();
@@ -116,22 +118,21 @@ public:
         return ret?cv_status::no_timeout:cv_status::timeout;
     }
 
-    template <class Rep, class Period, class Predicate>
-    bool wait_for(std::unique_lock<std::mutex>& lock,
-                   const std::chrono::duration<Rep, Period>& rel_time,
-                   Predicate pred)
+    template <class M, class Rep, class Period, class Predicate>
+    bool wait_for(M& lock,
+       const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
     {
         wait_for(lock, rel_time);
         return pred();
     }
-    template <class Clock, class Duration>
-    cv_status wait_until (unique_lock<mutex>& lock,
+    template <class M, class Clock, class Duration>
+    cv_status wait_until (M& lock,
       const chrono::time_point<Clock,Duration>& abs_time)
     {
         return wait_for(lock, abs_time - Clock::now());
     }
-    template <class Clock, class Duration, class Predicate>
-    bool wait_until (std::unique_lock<std::mutex>& lock,
+    template <class M, class Clock, class Duration, class Predicate>
+    bool wait_until (M& lock,
       const std::chrono::time_point<Clock, Duration>& abs_time,
       Predicate pred)
     {
@@ -141,6 +142,34 @@ public:
         else
             return wait_for(lock, time, pred);
     }
+};
+class condition_variable: protected condition_variable_any
+{
+protected:
+    typedef condition_variable_any base;
+public:
+    using base::native_handle_type;
+    using base::native_handle;
+    using base::base;
+    using base::notify_all;
+    using base::notify_one;
+    void wait(unique_lock<mutex> &lock)
+    {       base::wait(lock);                               }
+    template <class Predicate>
+    void wait(unique_lock<mutex>& lock, Predicate pred)
+    {       base::wait(lock, pred);                         }
+    template <class Rep, class Period>
+    std::cv_status wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
+    {      return base::wait_for(lock, rel_time);           }
+    template <class Rep, class Period, class Predicate>
+    bool wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
+    {        return base::wait_for(lock, rel_time, pred);   }
+    template <class Clock, class Duration>
+    cv_status wait_until (unique_lock<mutex>& lock, const chrono::time_point<Clock,Duration>& abs_time)
+    {        return base::wait_for(lock, abs_time);         }
+    template <class Clock, class Duration, class Predicate>
+    bool wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
+    {        return base::wait_until(lock, abs_time, pred); }
 };
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H
