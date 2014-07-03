@@ -24,6 +24,7 @@ int main()
         cond = true;
         cv.notify_all();
        }
+
        printf("thread finished\n");
        fflush(stdout);
       }
