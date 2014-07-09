@@ -1,3 +1,20 @@
+/**
+ * @file mingw.condition_variable.h
+ * @brief std::condition_vaiable implementation for MinGW
+ *
+ * (c) 2014 by Mega Limited, Wellsford, New Zealand
+ *
+ * This file is part of the standard threads implementation for MinGW.
+ *
+ * This code is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * @copyright GNU LGPL version 2.1 License.
+ *
+ * You should have received a copy of the license along with this
+ * program.
+ */
 #ifndef MINGW_CONDITIONAL_VARIABLE_H
 #define MINGW_CONDITIONAL_VARIABLE_H
 #include <atomic>
