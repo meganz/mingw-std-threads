@@ -1,7 +1,6 @@
 mingw-std-threads
 =================
 
-<<<<<<< HEAD
 Standard C++11 threading classes implementation, which are currently still missing
 on MinGW GCC.
 
@@ -28,6 +27,3 @@ std::thread, std::mutex, std::condition_variable are not defined. However, highe
 helper classes are still defined in &lt;mutex&gt; and are usable. Hence, this implementation
 does not re-define them, and to use these helpers, you should include &lt;mutex&gt; as well, as explained
 in the usage section.
-=======
-Standard threads implementation currently still missing on MinGW GCC on Windows
->>>>>>> bb25799b03f63d3ad74a5cc93c7388e6ed6c1f2d
