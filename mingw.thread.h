@@ -23,7 +23,8 @@
 #include <memory>
 #include <chrono>
 #include <system_error>
-
+//instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
+#define _STD_THREAD_INVALID_HANDLE 0
 namespace std
 {
 
@@ -46,11 +47,11 @@ public:
     typedef HANDLE native_handle_type;
     id get_id() const noexcept {return mThreadId;}
     native_handle_type native_handle() const {return mHandle;}
-    thread(): mHandle(INVALID_HANDLE_VALUE){}
+    thread(): mHandle(_STD_THREAD_INVALID_HANDLE){}
     thread(thread& other)
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
     {
-        other.mHandle = INVALID_HANDLE_VALUE;
+        other.mHandle = _STD_THREAD_INVALID_HANDLE;
         other.mThreadId.clear();
     }
     template<class Function, class... Args>
@@ -58,8 +59,8 @@ public:
     {
         typedef decltype(std::bind(f, args...)) Call;
         Call* call = new Call(std::bind(f, args...));
-        mHandle = _beginthreadex(NULL, 0, threadfunc<Call>,
-            (LPVOID)call, 0, &(mThreadId.mId));
+        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
+            (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
     }
     template <class Call>
     static unsigned long __stdcall threadfunc(void* arg)
@@ -68,18 +69,18 @@ public:
         (*upCall)();
         return (unsigned long)0;
     }
-    bool joinable() const {return mHandle != INVALID_HANDLE_VALUE;}
+    bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
     void join()
     {
         if (get_id() == GetCurrentThreadId())
             throw system_error(EDEADLK, generic_category());
-        if (mHandle == INVALID_HANDLE_VALUE)
+        if (mHandle == _STD_THREAD_INVALID_HANDLE)
             throw system_error(ESRCH, generic_category());
         if (!joinable())
             throw system_error(EINVAL, generic_category());
         WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
-        mHandle = INVALID_HANDLE_VALUE;
+        mHandle = _STD_THREAD_INVALID_HANDLE;
         mThreadId.clear();
     }
 
@@ -106,7 +107,7 @@ public:
     {
         if (!joinable())
             throw system_error();
-        mHandle = INVALID_HANDLE_VALUE;
+        mHandle = _STD_THREAD_INVALID_HANDLE;
         mThreadId.clear();
     }
 };
