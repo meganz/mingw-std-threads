@@ -58,7 +58,7 @@ public:
     {
         typedef decltype(std::bind(f, args...)) Call;
         Call* call = new Call(std::bind(f, args...));
-        mHandle = CreateThread(NULL, 0, threadfunc<Call>,
+        mHandle = _beginthreadex(NULL, 0, threadfunc<Call>,
             (LPVOID)call, 0, &(mThreadId.mId));
     }
     template <class Call>
