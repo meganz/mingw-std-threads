@@ -65,7 +65,7 @@ public:
             (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
     }
     template <class Call>
-    static unsigned long __stdcall threadfunc(void* arg)
+    static unsigned int __stdcall threadfunc(void* arg)
     {
         std::unique_ptr<Call> upCall(static_cast<Call*>(arg));
         (*upCall)();
