@@ -23,6 +23,8 @@
 #include <memory>
 #include <chrono>
 #include <system_error>
+#include <process.h>
+
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
 #define _STD_THREAD_INVALID_HANDLE 0
 namespace std
