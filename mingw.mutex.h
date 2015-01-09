@@ -18,6 +18,13 @@
 #ifndef WIN32STDMUTEX_H
 #define WIN32STDMUTEX_H
 
+#ifndef EPROTO
+#define EPROTO 134
+#endif
+
+#include <cstdio>
+#include <pthread.h>
+
 #if !defined(STDTHREAD_STRICT_NONRECURSIVE_LOCKS) && !defined(NDEBUG)
     #define STDTHREAD_STRICT_NONRECURSIVE_LOCKS
 #endif
