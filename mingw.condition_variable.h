@@ -28,9 +28,9 @@ class condition_variable_any
 {
 protected:
     recursive_mutex mMutex;
+    atomic<int> mNumWaiters;
     HANDLE mSemaphore;
     HANDLE mWakeEvent;
-    atomic<int> mNumWaiters;
 public:
     typedef HANDLE native_handle_type;
     native_handle_type native_handle() {return mSemaphore;}
