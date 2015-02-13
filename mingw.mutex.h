@@ -78,6 +78,7 @@ public:
 #endif
     }
 protected:
+#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
     void checkSetOwnerAfterLock()
     {
         DWORD self = GetCurrentThreadId();
@@ -100,6 +101,7 @@ protected:
         }
         mOwnerThread = 0;
     }
+#endif
 public:
     void unlock()
     {
