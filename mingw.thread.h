@@ -41,12 +41,16 @@ public:
     id get_id() const noexcept {return mThreadId;}
     native_handle_type native_handle() const {return mHandle;}
     thread(): mHandle(_STD_THREAD_INVALID_HANDLE){}
-    thread(thread& other)
+
+    thread(thread&& other)
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
     {
         other.mHandle = _STD_THREAD_INVALID_HANDLE;
         other.mThreadId.clear();
     }
+
+    thread(const thread &other)=delete;
+
     template<class Function, class... Args>
     explicit thread(Function&& f, Args&&... args)
     {

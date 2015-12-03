@@ -13,6 +13,9 @@
     #define STDTHREAD_STRICT_NONRECURSIVE_LOCKS
 #endif
 
+#include <chrono>
+#include <system_error>
+
 namespace std
 {
 class recursive_mutex
@@ -205,7 +208,7 @@ public:
     }
 };
 // You can use the scoped locks and other helpers that are still provided by <mutex>
-// In that case, you must include <mutex> before inclusing this file, so that this
+// In that case, you must include <mutex> before including this file, so that this
 // file will not try to redefine them
 #ifndef _GLIBCXX_MUTEX
 
