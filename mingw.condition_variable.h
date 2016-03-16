@@ -2,8 +2,20 @@
 * @file condition_variable.h
 * @brief std::condition_variable implementation for MinGW
 *
-* This file is part of the mingw-w64 runtime package.
-* No warranty is given; refer to the file DISCLAIMER within this package.
+* (c) 2013-2016 by Mega Limited, Auckland, New Zealand
+* @author Alexander Vassilev
+*
+* @copyright Simplified (2-clause) BSD License.
+* You should have received a copy of the license along with this
+* program.
+*
+* This code is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* @note
+* This file may become part of the mingw-w64 runtime package. If/when this happens,
+* the appropriate license will be added, i.e. this code will become dual-licensed,
+* and the current BSD 2-clause license will stay.
 */
 
 #ifndef MINGW_CONDITIONAL_VARIABLE_H

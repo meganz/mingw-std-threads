@@ -1,9 +1,20 @@
 /**
 * @file mingw.mutex.h
 * @brief std::mutex et al implementation for MinGW
+** (c) 2013-2016 by Mega Limited, Auckland, New Zealand
+* @author Alexander Vassilev
 *
-* This file is part of the mingw-w64 runtime package.
-* No warranty is given; refer to the file DISCLAIMER within this package.
+* @copyright Simplified (2-clause) BSD License.
+* You should have received a copy of the license along with this
+* program.
+*
+* This code is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* @note
+* This file may become part of the mingw-w64 runtime package. If/when this happens,
+* the appropriate license will be added, i.e. this code will become dual-licensed,
+* and the current BSD 2-clause license will stay.
 */
 
 #ifndef WIN32STDMUTEX_H
@@ -185,6 +196,7 @@ protected:
     typedef _NonRecursiveMutex<recursive_timed_mutex> base;
 public:
     using base::base;
+    timed_mutex(const timed_mutex&) = delete;
     template <class Rep, class Period>
     void try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {

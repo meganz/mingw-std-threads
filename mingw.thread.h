@@ -1,9 +1,20 @@
 /**
 * @file mingw.thread.h
 * @brief std::thread implementation for MinGW
+* (c) 2013-2016 by Mega Limited, Auckland, New Zealand
+* @author Alexander Vassilev
 *
-* This file is part of the mingw-w64 runtime package.
-* No warranty is given; refer to the file DISCLAIMER within this package.
+* @copyright Simplified (2-clause) BSD License.
+* You should have received a copy of the license along with this
+* program.
+*
+* This code is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* @note
+* This file may become part of the mingw-w64 runtime package. If/when this happens,
+* the appropriate license will be added, i.e. this code will become dual-licensed,
+* and the current BSD 2-clause license will stay.
 */
 
 #ifndef WIN32STDTHREAD_H
@@ -99,15 +110,30 @@ public:
         std::swap(mHandle, other.mHandle);
         std::swap(mThreadId.mId, other.mThreadId.mId);
     }
-    static unsigned int hardware_concurrency() noexcept {return 1;}
+    static unsigned int hardware_concurrency() noexcept
+    {
+        static int ncpus = -1;
+        if (ncpus == -1)
+        {
+            SYSTEM_INFO sysinfo;
+            GetSystemInfo(&sysinfo);
+            numcpus = sysinfo.dwNumberOfProcessors;
+        }
+        return ncpus;
+    }
     void detach()
     {
         if (!joinable())
             throw system_error();
-        mHandle = _STD_THREAD_INVALID_HANDLE;
+        if (mHandle != _STD_THREAD_INVALID_HANDLE)
+        {
+            CloseHandle(mHandle);
+            mHandle = _STD_THREAD_INVALID_HANDLE;
+        }
         mThreadId.clear();
     }
 };
+
 namespace this_thread
 {
     inline thread::id get_id() {return thread::id(GetCurrentThreadId());}
