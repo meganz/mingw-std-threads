@@ -1,61 +1,58 @@
+#undef _GLIBCXX_HAS_GTHREADS
 #include "../mingw.thread.h"
 #include <mutex>
 #include "../mingw.mutex.h"
 #include "../mingw.condition_variable.h"
 #include <atomic>
+#include <assert.h>
+
 using namespace std;
 
 bool cond = false;
 std::mutex m;
 std::condition_variable cv;
-
+#define LOG(fmtString,...) printf(fmtString "\n", ##__VA_ARGS__); fflush(stdout)
 int main()
 {
-
-    std::thread t([](int a, const char* b, int c)mutable
+    std::thread t([](bool a, const char* b, int c)mutable
     {
         try
         {
-  //     printf("Thread started: arg = %d, %s, %d\n", a, b, c);
-  //     fflush(stdout);
+            LOG("Worker thread started, sleeping for a while...");
+            assert(a && !strcmp(b, "test message") && c = -20);
             this_thread::sleep_for(std::chrono::milliseconds(5000));
             {
                 lock_guard<mutex> lock(m);
                 cond = true;
+                LOG("Notifying condvar");
                 cv.notify_all();
             }
 
-            printf("thread finished\n");
-            fflush(stdout);
+            LOG("Worker thread finishing");
         }
         catch(std::exception& e)
         {
-            printf("EXCEPTION in thread: %s\n", e.what());
+            printf("EXCEPTION in worker thread: %s\n", e.what());
         }
     },
-    1, "test message", 3);
+    true, "test message", -20);
     try
     {
-        //    printf("trylock: %d\n", m.try_lock());
-        //    fflush(stdout);
-        printf("condvar waiting\n");
-        fflush(stdout);
+        LOG("Main thread: waiting on condvar...");
         {
             std::unique_lock<mutex> lk(m);
             cv.wait(lk, []{ return cond;} );
-            printf("condvar notified, cond = %d\n", cond);
-            fflush(stdout);
+            LOG("condvar notified, cond = %d", cond);
         }
-        printf("waiting for thread to terminate\n");
-        fflush(stdout);
+        LOG("Main thread: Waiting on worker join...");
 
         t.join();
-        printf("join complete\n");
+        LOG("Main thread: Worker thread joined");
         fflush(stdout);
     }
     catch(std::exception& e)
     {
-        printf("EXCEPTION in main thread: %s\n", e.what());
+        LOG("EXCEPTION in main thread: %s", e.what());
     }
 
     return 0;

@@ -19,10 +19,26 @@
 
 #ifndef WIN32STDMUTEX_H
 #define WIN32STDMUTEX_H
-
-#if !defined(STDTHREAD_STRICT_NONRECURSIVE_LOCKS) && !defined(NDEBUG)
-    #define STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+#ifdef _GLIBCXX_HAS_GTHREADS
+#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
+    already has C++11 std threading classes implemented, based on pthreads.             \
+    You are likely to have class redefinition errors below, and unfirtunately this      \
+    implementation can not be used standalone                                           \
+    and independent of the system <mutex> header, since it relies on it for             \
+    std::unique_lock and other utility classes. If you would still like to use this     \
+    implementation (as it is more lightweight), you have to edit the                    \
+    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
+    This will prevent system headers from defining actual threading classes while still \
+    defining the necessary utility classes.
 #endif
+// Recursion checks on non-recursive locks have some performance penalty, so the user
+// may want to disable the checks in release builds. In that case, make sure they
+// are always enabled in debug builds.
+
+#if defined(STDMUTEX_NO_RECURSION_CHECKS) && !defined(NDEBUG)
+    #undef STDMUTEX_NO_RECURSION_CHECKS
+#endif
+
 #include <windows.h>
 #include <chrono>
 #include <system_error>
@@ -67,32 +83,23 @@ public:
     }
 };
 template <class B>
-class _NonRecursiveMutex: protected B
+class _NonRecursive: protected B
 {
 protected:
     typedef B base;
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
     DWORD mOwnerThread;
-#endif
 public:
     using base::native_handle_type;
     using base::native_handle;
-    _NonRecursiveMutex() noexcept :base()
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
-    , mOwnerThread(0)
-#endif
-    {}
-    _NonRecursiveMutex (const _NonRecursiveMutex<B>&) = delete;
-    _NonRecursiveMutex& operator= (const _NonRecursiveMutex<B>&) = delete;
+    _NonRecursive() noexcept :base(), mOwnerThread(0) {}
+    _NonRecursive (const _NonRecursive<B>&) = delete;
+    _NonRecursive& operator= (const _NonRecursive<B>&) = delete;
     void lock()
     {
         base::lock();
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
         checkSetOwnerAfterLock();
-#endif
     }
 protected:
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
     void checkSetOwnerAfterLock()
     {
         DWORD self = GetCurrentThreadId();
@@ -115,27 +122,26 @@ protected:
         }
         mOwnerThread = 0;
     }
-#endif
 public:
     void unlock()
     {
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
         checkSetOwnerBeforeUnlock();
-#endif
         base::unlock();
     }
     bool try_lock()
     {
         bool ret = base::try_lock();
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
         if (ret)
             checkSetOwnerAfterLock();
-#endif
         return ret;
     }
 };
 
-typedef _NonRecursiveMutex<recursive_mutex> mutex;
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+    typedef _NonRecursive<recursive_mutex> mutex;
+#else
+    typedef recursive_mutex mutex;
+#endif
 
 class recursive_timed_mutex
 {
@@ -200,10 +206,11 @@ public:
         return try_lock_for(timeout_time - Clock::now());
     }
 };
-class timed_mutex: public _NonRecursiveMutex<recursive_timed_mutex>
+
+class timed_mutex: public _NonRecursive<recursive_timed_mutex>
 {
 protected:
-    typedef _NonRecursiveMutex<recursive_timed_mutex> base;
+    typedef _NonRecursive<recursive_timed_mutex> base;
 public:
     using base::base;
     timed_mutex(const timed_mutex&) = delete;
@@ -212,7 +219,7 @@ public:
     void try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
         bool ret = base::try_lock_for(dur);
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
             checkSetOwnerAfterLock();
 #endif
@@ -223,7 +230,7 @@ public:
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
     {
         bool ret = base::try_lock_until(timeout_time);
-#ifdef STDTHREAD_STRICT_NONRECURSIVE_LOCKS
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
             checkSetOwnerAfterLock();
 #endif
