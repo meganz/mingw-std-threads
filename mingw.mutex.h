@@ -27,6 +27,13 @@
 #include <chrono>
 #include <system_error>
 
+#ifndef EPROTO
+    #define EPROTO 134
+#endif
+#ifndef EOWNERDEAD
+    #define EOWNERDEAD 133
+#endif
+
 namespace std
 {
 class recursive_mutex
