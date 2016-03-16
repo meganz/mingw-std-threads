@@ -117,7 +117,7 @@ public:
         {
             SYSTEM_INFO sysinfo;
             GetSystemInfo(&sysinfo);
-            numcpus = sysinfo.dwNumberOfProcessors;
+            ncpus = sysinfo.dwNumberOfProcessors;
         }
         return ncpus;
     }
