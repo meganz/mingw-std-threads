@@ -31,7 +31,7 @@ It seems that recent versions of mingw-w64 include a win32 port of pthreads, and
 the std::thread, std::mutex etc classes implemented and working, based on that compatibility
 layer. This is a somewhat heavier implementation, as it brings a not very thin abstraction layer.
 So you may still want to use this implementation for efficiency purposes. Unfortunately you can't use it
-standalone and independent of the system <mutex> header, as it relies on it for std::unique_lock and other
+standalone and independent of the system &lt;mutex&gt; header, as it relies on it for std::unique_lock and other
 non-trivial utility classes. 'In that case you will need to edit the c++-config.h file of your MinGW setup
 and comment out the definition of _GLIBCXX_HAS_GTHREADS. This will cause the system headers to not define the
 actrual thread, mutex, etc classes, but still define the necessary utility classes.
