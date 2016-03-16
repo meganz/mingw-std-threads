@@ -23,7 +23,7 @@
 #if !defined(STDTHREAD_STRICT_NONRECURSIVE_LOCKS) && !defined(NDEBUG)
     #define STDTHREAD_STRICT_NONRECURSIVE_LOCKS
 #endif
-
+#include <windows.h>
 #include <chrono>
 #include <system_error>
 
@@ -41,6 +41,7 @@ public:
         InitializeCriticalSection(&mHandle);
     }
     recursive_mutex (const recursive_mutex&) = delete;
+    recursive_mutex& operator=(const recursive_mutex&) = delete;
     ~recursive_mutex() noexcept
     {
         DeleteCriticalSection(&mHandle);
@@ -75,6 +76,7 @@ public:
 #endif
     {}
     _NonRecursiveMutex (const _NonRecursiveMutex<B>&) = delete;
+    _NonRecursiveMutex& operator= (const _NonRecursiveMutex<B>&) = delete;
     void lock()
     {
         base::lock();
@@ -136,6 +138,7 @@ public:
     typedef HANDLE native_handle_type;
     native_handle_type native_handle() const {return mHandle;}
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
+    recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL)){}
     ~recursive_timed_mutex()
     {
@@ -197,6 +200,7 @@ protected:
 public:
     using base::base;
     timed_mutex(const timed_mutex&) = delete;
+    timed_mutex& operator=(const timed_mutex&) = delete;
     template <class Rep, class Period>
     void try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
