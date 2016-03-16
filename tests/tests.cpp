@@ -19,7 +19,7 @@ int main()
         try
         {
             LOG("Worker thread started, sleeping for a while...");
-            assert(a && !strcmp(b, "test message") && c = -20);
+            assert(a && !strcmp(b, "test message") && (c == -20));
             this_thread::sleep_for(std::chrono::milliseconds(5000));
             {
                 lock_guard<mutex> lock(m);
