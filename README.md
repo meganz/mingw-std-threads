@@ -39,7 +39,7 @@ actual thread, mutex, etc classes, but still define the necessary utility classe
 Why MinGW has no threading classes 
 ==================================
 It seems that for cross-platform threading implementation, the GCC standard library relies on
-the gthreads library. If this library is not available, as is the case with MinGW, the
+the gthreads/pthreads library. If this library is not available, as is the case with MinGW, the
 std::thread, std::mutex, std::condition_variable are not defined. However, higher-level mutex
 helper classes are still defined in &lt;mutex&gt; and are usable. Hence, this implementation
 does not re-define them, and to use these helpers, you should include &lt;mutex&gt; as well, as explained
