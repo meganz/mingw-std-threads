@@ -216,7 +216,7 @@ public:
     timed_mutex(const timed_mutex&) = delete;
     timed_mutex& operator=(const timed_mutex&) = delete;
     template <class Rep, class Period>
-    void try_lock_for(const std::chrono::duration<Rep,Period>& dur)
+    bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
         bool ret = base::try_lock_for(dur);
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
