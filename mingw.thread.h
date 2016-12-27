@@ -25,6 +25,7 @@
 #include <memory>
 #include <chrono>
 #include <system_error>
+#include <cerrno>
 #include <process.h>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
@@ -82,6 +83,12 @@ public:
         Call* call = new Call(std::bind(f, args...));
         mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
             (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
+        if (mHandle == _STD_THREAD_INVALID_HANDLE)
+        {
+            int errnum = errno;
+            delete call;
+            throw std::system_error(errnum, std::generic_category());
+        }
     }
     template <class Call>
     static unsigned int __stdcall threadfunc(void* arg)
