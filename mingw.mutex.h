@@ -42,6 +42,7 @@
 #include <windows.h>
 #include <chrono>
 #include <system_error>
+#include <cstdio>
 
 #ifndef EPROTO
     #define EPROTO 134
