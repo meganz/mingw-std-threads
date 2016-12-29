@@ -55,7 +55,7 @@ public:
         void clear() {mId = 0;}
         friend class thread;
     public:
-        id(DWORD aId=0):mId(aId){}
+        explicit id(DWORD aId=0):mId(aId){}
         bool operator==(const id& other) const {return mId == other.mId;}
     };
 protected:
@@ -100,7 +100,7 @@ public:
     bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
     void join()
     {
-        if (get_id() == GetCurrentThreadId())
+        if (get_id() == id(GetCurrentThreadId()))
             throw std::system_error(EDEADLK, std::generic_category());
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
             throw std::system_error(ESRCH, std::generic_category());
