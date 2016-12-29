@@ -90,7 +90,7 @@ protected:
 //The notify_all() must handle this grafecully
 //
         else
-            throw system_error(EPROTO, generic_category());
+            throw std::system_error(EPROTO, std::generic_category());
     }
 public:
     template <class M>
@@ -118,7 +118,7 @@ public:
         {
             auto ret = WaitForSingleObject(mWakeEvent, 1000);
             if ((ret == WAIT_FAILED) || (ret == WAIT_ABANDONED))
-                throw system_error(EPROTO, generic_category());
+                throw std::system_error(EPROTO, std::generic_category());
         }
         assert(mNumWaiters == 0);
 //in case some of the waiters timed out just after we released the
@@ -139,7 +139,7 @@ public:
         {
             auto ret = WaitForSingleObject(mWakeEvent, 1000);
             if ((ret == WAIT_FAILED) || (ret == WAIT_ABANDONED))
-                throw system_error(EPROTO, generic_category());
+                throw std::system_error(EPROTO, std::generic_category());
         }
         assert(mNumWaiters == targetWaiters);
     }
