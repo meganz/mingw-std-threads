@@ -25,6 +25,7 @@
 #include <memory>
 #include <chrono>
 #include <system_error>
+#include <cerrno>
 #include <process.h>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
@@ -54,7 +55,7 @@ public:
         void clear() {mId = 0;}
         friend class thread;
     public:
-        id(DWORD aId=0):mId(aId){}
+        explicit id(DWORD aId=0):mId(aId){}
         bool operator==(const id& other) const {return mId == other.mId;}
     };
 protected:
@@ -82,6 +83,12 @@ public:
         Call* call = new Call(std::bind(f, args...));
         mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
             (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
+        if (mHandle == _STD_THREAD_INVALID_HANDLE)
+        {
+            int errnum = errno;
+            delete call;
+            throw std::system_error(errnum, std::generic_category());
+        }
     }
     template <class Call>
     static unsigned int __stdcall threadfunc(void* arg)
@@ -93,12 +100,12 @@ public:
     bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
     void join()
     {
-        if (get_id() == GetCurrentThreadId())
-            throw system_error(EDEADLK, generic_category());
+        if (get_id() == id(GetCurrentThreadId()))
+            throw std::system_error(EDEADLK, std::generic_category());
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
-            throw system_error(ESRCH, generic_category());
+            throw std::system_error(ESRCH, std::generic_category());
         if (!joinable())
-            throw system_error(EINVAL, generic_category());
+            throw std::system_error(EINVAL, std::generic_category());
         WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
         mHandle = _STD_THREAD_INVALID_HANDLE;
@@ -137,7 +144,7 @@ public:
     void detach()
     {
         if (!joinable())
-            throw system_error();
+            throw std::system_error(EINVAL, std::generic_category());
         if (mHandle != _STD_THREAD_INVALID_HANDLE)
         {
             CloseHandle(mHandle);
@@ -154,7 +161,7 @@ namespace this_thread
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
-        Sleep(chrono::duration_cast<chrono::milliseconds>(sleep_duration).count());
+        Sleep(std::chrono::duration_cast<std::chrono::milliseconds>(sleep_duration).count());
     }
     template <class Clock, class Duration>
     void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)

@@ -42,6 +42,7 @@
 #include <windows.h>
 #include <chrono>
 #include <system_error>
+#include <cstdio>
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -105,9 +106,9 @@ protected:
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread == self)
         {
-            fprintf(stderr, "FATAL: Recursive locking or non-recursive mutex detected. Throwing sysetm exception\n");
-            fflush(stderr);
-            throw system_error(EDEADLK, generic_category());
+            std::fprintf(stderr, "FATAL: Recursive locking or non-recursive mutex detected. Throwing sysetm exception\n");
+            std::fflush(stderr);
+            throw std::system_error(EDEADLK, std::generic_category());
         }
         mOwnerThread = self;
     }
@@ -116,9 +117,9 @@ protected:
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread != self)
         {
-            fprintf(stderr, "FATAL: Recursive unlocking of non-recursive mutex detected. Throwing system exception\n");
-            fflush(stderr);
-            throw system_error(EDEADLK, generic_category());
+            std::fprintf(stderr, "FATAL: Recursive unlocking of non-recursive mutex detected. Throwing system exception\n");
+            std::fflush(stderr);
+            throw std::system_error(EDEADLK, std::generic_category());
         }
         mOwnerThread = 0;
     }
@@ -163,15 +164,15 @@ public:
         if (ret != WAIT_OBJECT_0)
         {
             if (ret == WAIT_ABANDONED)
-                throw system_error(EOWNERDEAD, generic_category());
+                throw std::system_error(EOWNERDEAD, std::generic_category());
             else
-                throw system_error(EPROTO, generic_category());
+                throw std::system_error(EPROTO, std::generic_category());
         }
     }
     void unlock()
     {
         if (!ReleaseMutex(mHandle))
-            throw system_error(EDEADLK, generic_category());
+            throw std::system_error(EDEADLK, std::generic_category());
     }
     bool try_lock()
     {
@@ -181,9 +182,9 @@ public:
         else if (ret == WAIT_OBJECT_0)
             return true;
         else if (ret == WAIT_ABANDONED)
-            throw system_error(EOWNERDEAD, generic_category());
+            throw std::system_error(EOWNERDEAD, std::generic_category());
         else
-            throw system_error(EPROTO, generic_category());
+            throw std::system_error(EPROTO, std::generic_category());
     }
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
@@ -196,9 +197,9 @@ public:
         else if (ret == WAIT_OBJECT_0)
             return true;
         else if (ret == WAIT_ABANDONED)
-            throw system_error(EOWNERDEAD, generic_category());
+            throw std::system_error(EOWNERDEAD, std::generic_category());
         else
-            throw system_error(EPROTO, generic_category());
+            throw std::system_error(EPROTO, std::generic_category());
     }
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
