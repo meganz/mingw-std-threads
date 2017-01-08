@@ -267,7 +267,7 @@ public:
     lock_guard(const lock_guard&) = delete;
     lock_guard& operator=(const lock_guard&) = delete;
     explicit lock_guard(mutex_type& m): mMutex(m) { mMutex.lock();  }
-    lock_guard(mutex_type& m, std::adopt_lock_t):mMutex(m){}
+    lock_guard(mutex_type& m, adopt_lock_t):mMutex(m){}
     ~lock_guard() {  mMutex.unlock();   }
 };
 
