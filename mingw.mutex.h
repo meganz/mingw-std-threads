@@ -90,7 +90,7 @@ protected:
     typedef B base;
     DWORD mOwnerThread;
 public:
-    using base::native_handle_type;
+    using typename base::native_handle_type;
     using base::native_handle;
     _NonRecursive() noexcept :base(), mOwnerThread(0) {}
     _NonRecursive (const _NonRecursive<B>&) = delete;
