@@ -189,7 +189,7 @@ public:
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
-        DWORD timeout = (DWORD)chrono::duration_cast<chrono::milliseconds>(dur).count();
+        DWORD timeout = (DWORD)std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
 
         DWORD ret = WaitForSingleObject(mHandle, timeout);
         if (ret == WAIT_TIMEOUT)
