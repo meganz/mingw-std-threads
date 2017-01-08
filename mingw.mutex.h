@@ -106,7 +106,7 @@ protected:
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread == self)
         {
-            std::fprintf(stderr, "FATAL: Recursive locking or non-recursive mutex detected. Throwing sysetm exception\n");
+            std::fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex detected. Throwing system exception\n");
             std::fflush(stderr);
             throw std::system_error(EDEADLK, std::generic_category());
         }
