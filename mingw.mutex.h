@@ -90,7 +90,7 @@ protected:
     typedef B base;
     DWORD mOwnerThread;
 public:
-    using base::native_handle_type;
+    using typename base::native_handle_type;
     using base::native_handle;
     _NonRecursive() noexcept :base(), mOwnerThread(0) {}
     _NonRecursive (const _NonRecursive<B>&) = delete;
@@ -106,7 +106,7 @@ protected:
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread == self)
         {
-            std::fprintf(stderr, "FATAL: Recursive locking or non-recursive mutex detected. Throwing sysetm exception\n");
+            std::fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex detected. Throwing system exception\n");
             std::fflush(stderr);
             throw std::system_error(EDEADLK, std::generic_category());
         }
@@ -189,7 +189,7 @@ public:
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
-        DWORD timeout = (DWORD)chrono::duration_cast<chrono::milliseconds>(dur).count();
+        DWORD timeout = (DWORD)std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
 
         DWORD ret = WaitForSingleObject(mHandle, timeout);
         if (ret == WAIT_TIMEOUT)
@@ -267,7 +267,7 @@ public:
     lock_guard(const lock_guard&) = delete;
     lock_guard& operator=(const lock_guard&) = delete;
     explicit lock_guard(mutex_type& m): mMutex(m) { mMutex.lock();  }
-    lock_guard(mutex_type& m, std::adopt_lock_t):mMutex(m){}
+    lock_guard(mutex_type& m, adopt_lock_t):mMutex(m){}
     ~lock_guard() {  mMutex.unlock();   }
 };
 
