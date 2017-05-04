@@ -202,7 +202,7 @@ public:
     {        return base::wait_for(lock, rel_time, pred);   }
     template <class Clock, class Duration>
     cv_status wait_until (unique_lock<mutex>& lock, const chrono::time_point<Clock,Duration>& abs_time)
-    {        return base::wait_for(lock, abs_time);         }
+    {        return base::wait_until(lock, abs_time);         }
     template <class Clock, class Duration, class Predicate>
     bool wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
     {        return base::wait_until(lock, abs_time, pred); }
