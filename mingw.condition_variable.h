@@ -131,9 +131,9 @@ public:
     void notify_one() noexcept
     {
         lock_guard<recursive_mutex> lock(mMutex);
-        if (!mNumWaiters)
-            return;
         int targetWaiters = mNumWaiters.load() - 1;
+        if (targetWaiters <= -1)
+            return;
         ReleaseSemaphore(mSemaphore, 1, NULL);
         while(mNumWaiters > targetWaiters)
         {
