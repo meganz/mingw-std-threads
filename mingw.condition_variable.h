@@ -117,8 +117,8 @@ public:
         while(mNumWaiters > 0)
         {
             auto ret = WaitForSingleObject(mWakeEvent, 1000);
-            if ((ret == WAIT_FAILED) || (ret == WAIT_ABANDONED))
-                throw std::system_error(EPROTO, std::generic_category());
+            if (ret == WAIT_FAILED || ret == WAIT_ABANDONED)
+                std::terminate();
         }
         assert(mNumWaiters == 0);
 //in case some of the waiters timed out just after we released the
@@ -138,8 +138,8 @@ public:
         while(mNumWaiters > targetWaiters)
         {
             auto ret = WaitForSingleObject(mWakeEvent, 1000);
-            if ((ret == WAIT_FAILED) || (ret == WAIT_ABANDONED))
-                throw std::system_error(EPROTO, std::generic_category());
+            if (ret == WAIT_FAILED || ret == WAIT_ABANDONED)
+                std::terminate();
         }
         assert(mNumWaiters == targetWaiters);
     }
