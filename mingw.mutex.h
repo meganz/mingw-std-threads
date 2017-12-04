@@ -61,6 +61,7 @@ public:
     typedef LPCRITICAL_SECTION native_handle_type;
     native_handle_type native_handle() {return &mHandle;}
     recursive_mutex() noexcept
+      : mHandle()
     {
         InitializeCriticalSection(&mHandle);
     }
@@ -83,10 +84,15 @@ public:
         return (TryEnterCriticalSection(&mHandle)!=0);
     }
 };
+
 template <class B>
 class _NonRecursive: protected B
 {
 protected:
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+//    Allow condition variable to unlock the native handle directly.
+    friend class win32::vista::condition_variable;
+#endif
     typedef B base;
     DWORD mOwnerThread;
 public:
@@ -153,7 +159,7 @@ public:
     native_handle_type native_handle() const {return mHandle;}
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
-    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL)){}
+    recursive_timed_mutex(): mHandle(CreateMutex(nullptr, FALSE, nullptr)){}
     ~recursive_timed_mutex()
     {
         CloseHandle(mHandle);
