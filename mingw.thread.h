@@ -27,6 +27,8 @@
 #include <system_error>
 #include <cerrno>
 #include <process.h>
+#include <utility>
+#include <ostream>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
 #error This version of MinGW seems to include a win32 port of pthreads, and probably    \
@@ -42,7 +44,7 @@
 #endif
 
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
-#define _STD_THREAD_INVALID_HANDLE 0
+#define _STD_THREAD_INVALID_HANDLE nullptr
 namespace std
 {
 
@@ -54,9 +56,16 @@ public:
         DWORD mId;
         void clear() {mId = 0;}
         friend class thread;
+        friend class hash<id>;
     public:
-        explicit id(DWORD aId=0):mId(aId){}
-        bool operator==(const id& other) const {return mId == other.mId;}
+        id() noexcept : mId(0) {}
+        explicit id(DWORD aId) noexcept : mId(aId) {}
+        bool operator==(const id& other) const noexcept {return mId == other.mId;}
+        bool operator<(const id& other) const noexcept {return mId < other.mId;}
+        bool operator!=(const id& other) const noexcept {return mId != other.mId;}
+        bool operator>(const id& other) const noexcept {return mId > other.mId;}
+        bool operator<=(const id& other) const noexcept {return mId <= other.mId;}
+        bool operator>=(const id& other) const noexcept {return mId >= other.mId;}
     };
 protected:
     HANDLE mHandle;
@@ -65,7 +74,7 @@ public:
     typedef HANDLE native_handle_type;
     id get_id() const noexcept {return mThreadId;}
     native_handle_type native_handle() const {return mHandle;}
-    thread(): mHandle(_STD_THREAD_INVALID_HANDLE){}
+    thread(): mHandle(_STD_THREAD_INVALID_HANDLE), mThreadId() {}
 
     thread(thread&& other)
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
@@ -78,10 +87,11 @@ public:
 
     template<class Function, class... Args>
     explicit thread(Function&& f, Args&&... args)
+      : mHandle(_STD_THREAD_INVALID_HANDLE), mThreadId()
     {
         typedef decltype(std::bind(f, args...)) Call;
         Call* call = new Call(std::bind(f, args...));
-        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
+        mHandle = (HANDLE)_beginthreadex(nullptr, 0, threadfunc<Call>,
             (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
         {
@@ -122,10 +132,10 @@ public:
     {
         if (joinable())
           std::terminate();
-        swap(std::forward<thread>(other));
+        swap(other);
         return *this;
     }
-    void swap(thread&& other) noexcept
+    void swap(thread& other) noexcept
     {
         std::swap(mHandle, other.mHandle);
         std::swap(mThreadId.mId, other.mThreadId.mId);
@@ -168,6 +178,26 @@ namespace this_thread
     {
         sleep_for(sleep_time-Clock::now());
     }
+}
+
+template<>
+struct hash<typename thread::id>
+{
+  typedef typename thread::id argument_type;
+  typedef size_t result_type;
+  size_t operator() (const typename thread::id & i) const noexcept
+  {
+    return i.mId;
+  }
+};
+
+template< class CharT, class Traits >
+std::basic_ostream<CharT,Traits>&
+    operator<<( std::basic_ostream<CharT,Traits>& ost, typename thread::id id )
+{
+  hash<typename thread::id> hasher;
+  ost << hasher(id);
+  return ost;
 }
 
 }
