@@ -334,12 +334,29 @@ class shared_lock
   {
   }
 
+  shared_lock& operator= (shared_lock<Mutex> && other) noexcept
+  {
+    if (&other != this)
+    {
+      if (owns_)
+        mutex_->unlock_shared();
+      mutex_ = other.mutex_;
+      owns_ = other.owns_;
+      other.mutex_ = nullptr;
+      other.owns_ = false;
+    }
+    return *this;
+  }
+
 
   ~shared_lock (void)
   {
     if (owns_)
       mutex_->unlock_shared();
   }
+
+  shared_lock (const shared_lock<Mutex> &) = delete;
+  shared_lock& operator= (const shared_lock<Mutex> &) = delete;
 
 //  Shared locking
   void lock (void)
