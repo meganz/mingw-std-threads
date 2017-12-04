@@ -84,6 +84,15 @@ public:
         return (TryEnterCriticalSection(&mHandle)!=0);
     }
 };
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+namespace win32
+{
+namespace vista
+{
+class condition_variable;
+}
+}
+#endif
 
 template <class B>
 class _NonRecursive: protected B
