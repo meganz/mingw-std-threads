@@ -24,6 +24,7 @@
 #include <atomic>
 #include <assert.h>
 #include "mingw.mutex.h"
+#include "mingw.shared_mutex.h"
 #include <chrono>
 #include <system_error>
 #include <windows.h>
@@ -344,6 +345,29 @@ protected:
   inline bool wait_impl (std::unique_lock<std::mutex> & lock, DWORD time)
   {
     return base::wait_impl(lock, time);
+  }
+
+  typedef std::win32::vista::shared_mutex native_shared_mutex;
+  bool wait_impl (std::unique_lock<native_shared_mutex> & lock, DWORD time)
+  {
+    static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0,
+                  "Flag CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as   \
+                  expected. Flag for exclusive mode is unknown (not specified  \
+                  by Microsoft Dev Center).");
+    native_shared_mutex * pmutex = lock.release();
+    BOOL success = SleepConditionVariableSRW( base::native_handle(),
+                                              pmutex->native_handle(), time, 0);
+    lock = std::unique_lock<native_shared_mutex>(*pmutex, std::adopt_lock);
+    return success;
+  }
+  bool wait_impl (std::shared_lock<native_shared_mutex> & lock, DWORD time)
+  {
+    native_shared_mutex * pmutex = lock.release();
+    BOOL success = SleepConditionVariableSRW( base::native_handle(),
+                                              pmutex->native_handle(), time,
+                                            CONDITION_VARIABLE_LOCKMODE_SHARED);
+    lock = std::shared_lock<native_shared_mutex>(*pmutex, std::adopt_lock);
+    return success;
   }
 public:
   typedef typename base::native_handle_type native_handle_type;
