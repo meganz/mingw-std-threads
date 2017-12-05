@@ -24,7 +24,9 @@
 #include <atomic>
 #include <assert.h>
 #include "mingw.mutex.h"
+#if WINVER >= 0x0601
 #include "mingw.shared_mutex.h"
+#endif
 #include <chrono>
 #include <system_error>
 #include <windows.h>
@@ -346,8 +348,8 @@ protected:
   {
     return base::wait_impl(lock, time);
   }
-
-  typedef std::win32::vista::shared_mutex native_shared_mutex;
+#if WINVER >= 0x0601
+  typedef std::win32::windows7::shared_mutex native_shared_mutex;
   bool wait_impl (std::unique_lock<native_shared_mutex> & lock, DWORD time)
   {
     static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0,
@@ -369,6 +371,7 @@ protected:
     lock = std::shared_lock<native_shared_mutex>(*pmutex, std::adopt_lock);
     return success;
   }
+#endif
 public:
   typedef typename base::native_handle_type native_handle_type;
   using base::native_handle;

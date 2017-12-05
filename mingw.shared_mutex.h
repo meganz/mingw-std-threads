@@ -161,8 +161,8 @@ class shared_mutex
 #ifdef _WIN32
 namespace win32
 {
-#if (WINVER >= _WIN32_WINNT_VISTA)
-namespace vista
+#if (WINVER >= _WIN32_WINNT_WIN7)
+namespace windows7
 {
 class shared_mutex
 {
@@ -219,7 +219,7 @@ class shared_mutex
   }
 };
 
-} //  Namespace vista
+} //  Namespace windows7
 #endif
 } //  Namespace win32
 #endif  //  Compiling for Win32
@@ -227,8 +227,8 @@ class shared_mutex
 //    Though adding anything to the std namespace is generally frowned upon, the
 //  added features are only those intended for inclusion in C++17
 #if (__cplusplus < 201703L) || (defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS))
-#if (defined(_WIN32) && (WINVER >= _WIN32_WINNT_VISTA))
-  using win32::vista::shared_mutex;
+#if (defined(_WIN32) && (WINVER >= _WIN32_WINNT_WIN7))
+  using win32::windows7::shared_mutex;
 #else
   using portable::shared_mutex;
 #endif
@@ -286,6 +286,14 @@ class shared_lock
 {
   Mutex * mutex_;
   bool owns_;
+//  Reduce code redundancy
+  void verify_lockable (void)
+  {
+    if (mutex_ == nullptr)
+      throw system_error(make_error_code(errc::operation_not_permitted));
+    if (owns_)
+      throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+  }
  public:
   typedef Mutex mutex_type;
 
@@ -361,29 +369,20 @@ class shared_lock
 //  Shared locking
   void lock (void)
   {
-    if (mutex_ == nullptr)
-      throw system_error(make_error_code(errc::operation_not_permitted));
-    if (owns_)
-      throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+    verify_lockable();
     mutex_->lock_shared();
   }
 
   bool try_lock (void)
   {
-    if (mutex_ == nullptr)
-      throw system_error(make_error_code(errc::operation_not_permitted));
-    if (owns_)
-      throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+    verify_lockable();
     return mutex_->try_lock_shared();
   }
 
   template< class Clock, class Duration >
   bool try_lock_until( const chrono::time_point<Clock,Duration>& cutoff )
   {
-    if (mutex_ == nullptr)
-      throw system_error(make_error_code(errc::operation_not_permitted));
-    if (owns_)
-      throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+    verify_lockable();
     do {
       if (mutex_->try_lock_shared())
         return true;
@@ -402,13 +401,14 @@ class shared_lock
     if (!owns_)
       throw system_error(make_error_code(errc::operation_not_permitted));
     mutex_->unlock_shared();
+    owns_ = false;
   }
 
 //  Modifiers
   void swap (shared_lock<Mutex> & other) noexcept
   {
-    std::swap(mutex_, other.mutex_);
-    std::swap(owns_, other.owns_);
+    swap(mutex_, other.mutex_);
+    swap(owns_, other.owns_);
   }
 
   mutex_type * release (void) noexcept
