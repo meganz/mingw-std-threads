@@ -45,9 +45,10 @@
 
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
 #define _STD_THREAD_INVALID_HANDLE nullptr
-namespace std
+namespace mingw_stdthread
 {
-
+namespace win32
+{
 class thread
 {
 public:
@@ -56,7 +57,7 @@ public:
         DWORD mId;
         void clear() {mId = 0;}
         friend class thread;
-        friend class hash<id>;
+        friend class std::hash<id>;
     public:
         id() noexcept : mId(0) {}
         explicit id(DWORD aId) noexcept : mId(aId) {}
@@ -163,42 +164,57 @@ public:
         mThreadId.clear();
     }
 };
+} //  Namespace win32
+} //  Namespace mingw_stdthread
+
+namespace std
+{
+using ::mingw_stdthread::win32::thread;
 
 namespace this_thread
 {
-    inline thread::id get_id() {return thread::id(GetCurrentThreadId());}
-    inline void yield() {Sleep(0);}
-    template< class Rep, class Period >
-    void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
-    {
-        Sleep(std::chrono::duration_cast<std::chrono::milliseconds>(sleep_duration).count());
-    }
-    template <class Clock, class Duration>
-    void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)
-    {
-        sleep_for(sleep_time-Clock::now());
-    }
+  inline std::thread::id get_id()
+  {
+//    If, for some reason (such as a programmer editing this file), std::thread
+//  and ::mingw_stdthread::win32::thread are different, this will emit a
+//  compiler error, rather than allowing incorrect behavior.
+    return ::mingw_stdthread::win32::thread::id(GetCurrentThreadId());
+  }
+  inline void yield() {
+    Sleep(0);
+  }
+  template< class Rep, class Period >
+  void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
+  {
+    Sleep(std::chrono::duration_cast<std::chrono::milliseconds>(sleep_duration).count());
+  }
+  template <class Clock, class Duration>
+  void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)
+  {
+    sleep_for(sleep_time-Clock::now());
+  }
 }
 
+//  Specialization of templates is allowed in namespace std.
 template<>
-struct hash<typename thread::id>
+struct hash<typename ::mingw_stdthread::win32::thread::id>
 {
-  typedef typename thread::id argument_type;
+  typedef typename ::mingw_stdthread::win32::thread::id argument_type;
   typedef size_t result_type;
-  size_t operator() (const typename thread::id & i) const noexcept
+  size_t operator() (const argument_type & i) const noexcept
   {
     return i.mId;
   }
 };
+} //  Namespace std
 
 template< class CharT, class Traits >
 std::basic_ostream<CharT,Traits>&
-    operator<<( std::basic_ostream<CharT,Traits>& ost, typename thread::id id )
+    operator<<( std::basic_ostream<CharT,Traits>& ost,
+               typename ::mingw_stdthread::win32::thread::id id )
 {
-  hash<typename thread::id> hasher;
+  std::hash<typename std::thread::id> hasher;
   ost << hasher(id);
   return ost;
-}
-
 }
 #endif // WIN32STDTHREAD_H

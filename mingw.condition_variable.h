@@ -24,7 +24,9 @@
 #include <atomic>
 #include <assert.h>
 #include "mingw.mutex.h"
-#if WINVER >= 0x0601
+//    In Vista and higher, shared_mutexes can be used for condition_variable_any
+//  waiting directly (I.E. at high efficiency).
+#if (WINVER >= _WIN32_WINNT_VISTA)
 #include "mingw.shared_mutex.h"
 #endif
 #include <chrono>
@@ -45,16 +47,18 @@
 
 namespace std
 {
-
 enum class cv_status { no_timeout, timeout };
+}
 
+namespace mingw_stdthread
+{
 namespace win32
 {
 class condition_variable_any
 {
 protected:
-    recursive_mutex mMutex;
-    atomic<int> mNumWaiters;
+    std::recursive_mutex mMutex;
+    std::atomic<int> mNumWaiters;
     HANDLE mSemaphore;
     HANDLE mWakeEvent;
 public:
@@ -73,7 +77,7 @@ protected:
     bool wait_impl(M& lock, DWORD timeout)
     {
         {
-            lock_guard<recursive_mutex> guard(mMutex);
+            std::lock_guard<std::recursive_mutex> guard(mMutex);
             mNumWaiters++;
         }
         lock.unlock();
@@ -117,7 +121,7 @@ public:
 
     void notify_all() noexcept
     {
-        lock_guard<recursive_mutex> lock(mMutex); //block any further wait requests until all current waiters are unblocked
+        std::lock_guard<std::recursive_mutex> lock(mMutex); //block any further wait requests until all current waiters are unblocked
         if (mNumWaiters.load() <= 0)
             return;
 
@@ -138,7 +142,7 @@ public:
     }
     void notify_one() noexcept
     {
-        lock_guard<recursive_mutex> lock(mMutex);
+        std::lock_guard<std::recursive_mutex> lock(mMutex);
         int targetWaiters = mNumWaiters.load() - 1;
         if (targetWaiters <= -1)
             return;
@@ -155,7 +159,8 @@ public:
     std::cv_status wait_for(M& lock,
       const std::chrono::duration<Rep, Period>& rel_time)
     {
-        long long timeout = chrono::duration_cast<chrono::milliseconds>(rel_time).count();
+      using namespace std::chrono;
+        long long timeout = duration_cast<milliseconds>(rel_time).count();
         if (timeout < 0)
             timeout = 0;
         bool ret = wait_impl(lock, (DWORD)timeout);
@@ -171,7 +176,7 @@ public:
     }
     template <class M, class Clock, class Duration>
     std::cv_status wait_until (M& lock,
-      const chrono::time_point<Clock,Duration>& abs_time)
+      const std::chrono::time_point<Clock,Duration>& abs_time)
     {
         return wait_for(lock, abs_time - Clock::now());
     }
@@ -197,40 +202,41 @@ public:
     using base::base;
     using base::notify_all;
     using base::notify_one;
-    void wait(unique_lock<mutex> &lock)
+    void wait(std::unique_lock<std::mutex> &lock)
     {       base::wait(lock);                               }
     template <class Predicate>
-    void wait(unique_lock<mutex>& lock, Predicate pred)
+    void wait(std::unique_lock<std::mutex>& lock, Predicate pred)
     {       base::wait(lock, pred);                         }
     template <class Rep, class Period>
-    std::cv_status wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
+    std::cv_status wait_for(std::unique_lock<std::mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
     {      return base::wait_for(lock, rel_time);           }
     template <class Rep, class Period, class Predicate>
-    bool wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
+    bool wait_for(std::unique_lock<std::mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
     {        return base::wait_for(lock, rel_time, pred);   }
     template <class Clock, class Duration>
-    std::cv_status wait_until (unique_lock<mutex>& lock, const chrono::time_point<Clock,Duration>& abs_time)
+    std::cv_status wait_until (std::unique_lock<std::mutex>& lock, const std::chrono::time_point<Clock,Duration>& abs_time)
     {        return base::wait_until(lock, abs_time);         }
     template <class Clock, class Duration, class Predicate>
-    bool wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
+    bool wait_until (std::unique_lock<std::mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
     {        return base::wait_until(lock, abs_time, pred); }
 };
 
 //  If compiling for Vista or higher, use the native condition variable.
-#if WINVER >= 0x0600
+#if (WINVER >= _WIN32_WINNT_VISTA)
 namespace vista
 {
 class condition_variable
 {
 protected:
   CONDITION_VARIABLE cvariable_;
+  typedef ::mingw_stdthread::win32::mutex winmutex;
 
-  bool wait_impl (std::unique_lock<std::mutex> & lock, DWORD time)
+  bool wait_impl (std::unique_lock<winmutex> & lock, DWORD time)
   {
-    static_assert(std::is_same<typename std::mutex::native_handle_type, PCRITICAL_SECTION>::value,
+    static_assert(std::is_same<typename winmutex::native_handle_type, PCRITICAL_SECTION>::value,
                   "Native Win32 condition variable requires std::mutex to use  \
                    native Win32 critical section objects.");
-    std::mutex * pmutex = lock.release();
+    winmutex * pmutex = lock.release();
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
 #if (__cplusplus < 201402L)
     if (pmutex->mOwnerThread != GetCurrentThreadId())
@@ -244,7 +250,7 @@ protected:
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
     pmutex->mOwnerThread = GetCurrentThreadId();
 #endif
-    lock = std::unique_lock<std::mutex>(*pmutex, std::adopt_lock);
+    lock = std::unique_lock<winmutex>(*pmutex, std::adopt_lock);
     return success;
   }
 public:
@@ -291,7 +297,8 @@ public:
   std::cv_status wait_for(std::unique_lock<std::mutex>& lock,
                           const std::chrono::duration<Rep, Period>& rel_time)
   {
-    auto time = chrono::duration_cast<chrono::milliseconds>(rel_time).count();
+    using namespace std::chrono;
+    auto time = duration_cast<milliseconds>(rel_time).count();
     if (time < 0)
       time = 0;
     bool result = wait_impl(lock, static_cast<DWORD>(time));
@@ -309,7 +316,7 @@ public:
   }
   template <class Clock, class Duration>
   std::cv_status wait_until (std::unique_lock<std::mutex>& lock,
-                        const chrono::time_point<Clock,Duration>& abs_time)
+                        const std::chrono::time_point<Clock,Duration>& abs_time)
   {
     return wait_for(lock, abs_time - Clock::now());
   }
@@ -348,8 +355,8 @@ protected:
   {
     return base::wait_impl(lock, time);
   }
-#if WINVER >= 0x0601
-  typedef std::win32::windows7::shared_mutex native_shared_mutex;
+//#if (WINVER >= _WIN32_WINNT_VISTA)
+  typedef ::mingw_stdthread::win32::windows7::shared_mutex native_shared_mutex;
   bool wait_impl (std::unique_lock<native_shared_mutex> & lock, DWORD time)
   {
     static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0,
@@ -371,7 +378,7 @@ protected:
     lock = std::shared_lock<native_shared_mutex>(*pmutex, std::adopt_lock);
     return success;
   }
-#endif
+//#endif
 public:
   typedef typename base::native_handle_type native_handle_type;
   using base::native_handle;
@@ -402,7 +409,8 @@ public:
   template <class L, class Rep, class Period>
   std::cv_status wait_for(L& lock, const std::chrono::duration<Rep, Period>& period)
   {
-    auto time = chrono::duration_cast<chrono::milliseconds>(period).count();
+    using namespace std::chrono;
+    auto time = duration_cast<milliseconds>(period).count();
     if (time < 0)
       time = 0;
     bool result = wait_impl(lock, static_cast<DWORD>(time));
@@ -418,7 +426,7 @@ public:
   }
   template <class L, class Clock, class Duration>
   std::cv_status wait_until (L& lock,
-                        const chrono::time_point<Clock,Duration>& abs_time)
+                        const std::chrono::time_point<Clock,Duration>& abs_time)
   {
     return wait_for(lock, abs_time - Clock::now());
   }
@@ -438,14 +446,17 @@ public:
 } //  Namespace vista
 #endif
 } //  Namespace win32
+} //  Namespace mingw_stdthread
 
+namespace std
+{
 //  Bring a selected condition variable implementation into namespace std.
 #if WINVER < 0x0600
-  using win32::condition_variable;
-  using win32::condition_variable_any;
+  using ::mingw_stdthread::win32::condition_variable;
+  using ::mingw_stdthread::win32::condition_variable_any;
 #else
-  using win32::vista::condition_variable;
-  using win32::vista::condition_variable_any;
+  using ::mingw_stdthread::win32::vista::condition_variable;
+  using ::mingw_stdthread::win32::vista::condition_variable_any;
 #endif
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H

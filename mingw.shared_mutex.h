@@ -49,7 +49,7 @@
 
 #include <assert.h>
 
-namespace std
+namespace mingw_stdthread
 {
 //  Define a portable atomics-based shared mutex
 namespace portable
@@ -161,7 +161,12 @@ class shared_mutex
 #ifdef _WIN32
 namespace win32
 {
-#if (WINVER >= _WIN32_WINNT_WIN7)
+//    The native shared_mutex implementation primarily uses features of Windows
+//  Vista, but the features used for try_lock and try_lock_shared were not
+//  introduced until Windows 7. To allow limited use while compiling for Vista,
+//  I define the class without try_* functions in that case.
+//    Only fully-featured implementations will be placed into namespace std.
+#if (WINVER >= _WIN32_WINNT_VISTA)
 namespace windows7
 {
 class shared_mutex
@@ -182,14 +187,15 @@ class shared_mutex
   shared_mutex (const shared_mutex&) = delete;
   shared_mutex & operator= (const shared_mutex&) = delete;
 
+//  Behavior is undefined if a lock was previously acquired by this thread.
+  void lock (void)
+  {
+    AcquireSRWLockExclusive(&handle_);
+  }
+
   void lock_shared (void)
   {
     AcquireSRWLockShared(&handle_);
-  }
-
-  bool try_lock_shared (void)
-  {
-    return TryAcquireSRWLockShared(&handle_) != 0;
   }
 
   void unlock_shared (void)
@@ -197,21 +203,23 @@ class shared_mutex
     ReleaseSRWLockShared(&handle_);
   }
 
-//  Behavior is undefined if a lock was previously acquired.
-  void lock (void)
+  void unlock (void)
   {
-    AcquireSRWLockExclusive(&handle_);
+    ReleaseSRWLockExclusive(&handle_);
+  }
+
+
+#if (WINVER >= _WIN32_WINNT_WIN7)
+  bool try_lock_shared (void)
+  {
+    return TryAcquireSRWLockShared(&handle_) != 0;
   }
 
   bool try_lock (void)
   {
     return TryAcquireSRWLockExclusive(&handle_) != 0;
   }
-
-  void unlock (void)
-  {
-    ReleaseSRWLockExclusive(&handle_);
-  }
+#endif
 
   native_handle_type native_handle (void)
   {
@@ -220,17 +228,20 @@ class shared_mutex
 };
 
 } //  Namespace windows7
-#endif
+#endif  //  Compiling for Vista
 } //  Namespace win32
 #endif  //  Compiling for Win32
+} //  Namespace mingw_stdthread
 
+namespace std
+{
 //    Though adding anything to the std namespace is generally frowned upon, the
 //  added features are only those intended for inclusion in C++17
 #if (__cplusplus < 201703L) || (defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS))
 #if (defined(_WIN32) && (WINVER >= _WIN32_WINNT_WIN7))
-  using win32::windows7::shared_mutex;
+  using ::mingw_stdthread::win32::windows7::shared_mutex;
 #else
-  using portable::shared_mutex;
+  using ::mingw_stdthread::portable::shared_mutex;
 #endif
 #endif
 
