@@ -47,7 +47,7 @@
 #define _STD_THREAD_INVALID_HANDLE nullptr
 namespace mingw_stdthread
 {
-namespace win32
+namespace xp
 {
 class thread
 {
@@ -164,21 +164,21 @@ public:
         mThreadId.clear();
     }
 };
-} //  Namespace win32
+} //  Namespace xp
 } //  Namespace mingw_stdthread
 
 namespace std
 {
-using ::mingw_stdthread::win32::thread;
+using ::mingw_stdthread::xp::thread;
 
 namespace this_thread
 {
   inline std::thread::id get_id()
   {
 //    If, for some reason (such as a programmer editing this file), std::thread
-//  and ::mingw_stdthread::win32::thread are different, this will emit a
+//  and ::mingw_stdthread::xp::thread are different, this will emit a
 //  compiler error, rather than allowing incorrect behavior.
-    return ::mingw_stdthread::win32::thread::id(GetCurrentThreadId());
+    return ::mingw_stdthread::xp::thread::id(GetCurrentThreadId());
   }
   inline void yield() {
     Sleep(0);
@@ -197,9 +197,9 @@ namespace this_thread
 
 //  Specialization of templates is allowed in namespace std.
 template<>
-struct hash<typename ::mingw_stdthread::win32::thread::id>
+struct hash<typename ::mingw_stdthread::xp::thread::id>
 {
-  typedef typename ::mingw_stdthread::win32::thread::id argument_type;
+  typedef typename ::mingw_stdthread::xp::thread::id argument_type;
   typedef size_t result_type;
   size_t operator() (const argument_type & i) const noexcept
   {
@@ -211,9 +211,9 @@ struct hash<typename ::mingw_stdthread::win32::thread::id>
 template< class CharT, class Traits >
 std::basic_ostream<CharT,Traits>&
     operator<<( std::basic_ostream<CharT,Traits>& ost,
-               typename ::mingw_stdthread::win32::thread::id id )
+               typename mingw_stdthread::xp::thread::id id )
 {
-  std::hash<typename std::thread::id> hasher;
+  std::hash<typename mingw_stdthread::xp::thread::id> hasher;
   ost << hasher(id);
   return ost;
 }

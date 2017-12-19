@@ -158,15 +158,12 @@ class shared_mutex
 
 } //  Namespace portable
 
-#ifdef _WIN32
-namespace win32
-{
 //    The native shared_mutex implementation primarily uses features of Windows
 //  Vista, but the features used for try_lock and try_lock_shared were not
 //  introduced until Windows 7. To allow limited use while compiling for Vista,
 //  I define the class without try_* functions in that case.
 //    Only fully-featured implementations will be placed into namespace std.
-#if (WINVER >= _WIN32_WINNT_VISTA)
+#if defined(_WIN32) && (WINVER >= _WIN32_WINNT_VISTA)
 namespace windows7
 {
 class shared_mutex
@@ -208,7 +205,7 @@ class shared_mutex
     ReleaseSRWLockExclusive(&handle_);
   }
 
-
+//  TryAcquireSRW functions are a Windows 7 feature.
 #if (WINVER >= _WIN32_WINNT_WIN7)
   bool try_lock_shared (void)
   {
@@ -229,8 +226,6 @@ class shared_mutex
 
 } //  Namespace windows7
 #endif  //  Compiling for Vista
-} //  Namespace win32
-#endif  //  Compiling for Win32
 } //  Namespace mingw_stdthread
 
 namespace std
@@ -239,7 +234,7 @@ namespace std
 //  added features are only those intended for inclusion in C++17
 #if (__cplusplus < 201703L) || (defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS))
 #if (defined(_WIN32) && (WINVER >= _WIN32_WINNT_WIN7))
-  using ::mingw_stdthread::win32::windows7::shared_mutex;
+  using ::mingw_stdthread::windows7::shared_mutex;
 #else
   using ::mingw_stdthread::portable::shared_mutex;
 #endif

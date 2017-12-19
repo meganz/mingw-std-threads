@@ -52,7 +52,7 @@ enum class cv_status { no_timeout, timeout };
 
 namespace mingw_stdthread
 {
-namespace win32
+namespace xp
 {
 class condition_variable_any
 {
@@ -220,6 +220,7 @@ public:
     bool wait_until (std::unique_lock<std::mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
     {        return base::wait_until(lock, abs_time, pred); }
 };
+} //  Namespace xp
 
 //  If compiling for Vista or higher, use the native condition variable.
 #if (WINVER >= _WIN32_WINNT_VISTA)
@@ -229,7 +230,7 @@ class condition_variable
 {
 protected:
   CONDITION_VARIABLE cvariable_;
-  typedef ::mingw_stdthread::win32::mutex winmutex;
+  typedef xp::mutex winmutex;
 
   bool wait_impl (std::unique_lock<winmutex> & lock, DWORD time)
   {
@@ -281,20 +282,20 @@ public:
     WakeAllConditionVariable(&cvariable_);
   }
 
-  void wait (std::unique_lock<std::mutex> & lock)
+  void wait (std::unique_lock<winmutex> & lock)
   {
     wait_impl(lock, INFINITE);
   }
 
   template<class Predicate>
-  void wait (std::unique_lock<std::mutex> & lock, Predicate pred)
+  void wait (std::unique_lock<winmutex> & lock, Predicate pred)
   {
     while (!pred())
       wait(lock);
   }
 
   template <class Rep, class Period>
-  std::cv_status wait_for(std::unique_lock<std::mutex>& lock,
+  std::cv_status wait_for(std::unique_lock<winmutex>& lock,
                           const std::chrono::duration<Rep, Period>& rel_time)
   {
     using namespace std::chrono;
@@ -306,7 +307,7 @@ public:
   }
 
   template <class Rep, class Period, class Predicate>
-  bool wait_for(std::unique_lock<std::mutex>& lock,
+  bool wait_for(std::unique_lock<winmutex>& lock,
                 const std::chrono::duration<Rep, Period>& rel_time,
                 Predicate pred)
   {
@@ -315,13 +316,13 @@ public:
                       std::move(pred));
   }
   template <class Clock, class Duration>
-  std::cv_status wait_until (std::unique_lock<std::mutex>& lock,
+  std::cv_status wait_until (std::unique_lock<winmutex>& lock,
                         const std::chrono::time_point<Clock,Duration>& abs_time)
   {
     return wait_for(lock, abs_time - Clock::now());
   }
   template <class Clock, class Duration, class Predicate>
-  bool wait_until  (std::unique_lock<std::mutex>& lock,
+  bool wait_until  (std::unique_lock<winmutex>& lock,
                     const std::chrono::time_point<Clock, Duration>& abs_time,
                     Predicate pred)
   {
@@ -336,14 +337,17 @@ public:
 
 class condition_variable_any : protected condition_variable
 {
-protected:
+ protected:
   typedef condition_variable base;
-  std::mutex internal_mutex_;
+  typedef typename base::winmutex winmutex;
+  typedef windows7::shared_mutex native_shared_mutex;
+
+  winmutex internal_mutex_;
 
   template<class L>
   bool wait_impl (L & lock, DWORD time)
   {
-    std::unique_lock<std::mutex> internal_lock(internal_mutex_);
+    std::unique_lock<winmutex> internal_lock(internal_mutex_);
     lock.unlock();
     bool success = base::wait_impl(internal_lock, time);
     lock.lock();
@@ -351,12 +355,14 @@ protected:
   }
 //    If the lock happens to be called on a native Windows mutex, skip any extra
 //  contention.
-  inline bool wait_impl (std::unique_lock<std::mutex> & lock, DWORD time)
+  inline bool wait_impl (std::unique_lock<winmutex> & lock, DWORD time)
   {
     return base::wait_impl(lock, time);
   }
+//    Some shared_mutex functionality is available even in Vista, but it's not
+//  until Windows 7 that a full implementation is natively possible. The class
+//  itself is defined, with missing features, at the Vista feature level.
 //#if (WINVER >= _WIN32_WINNT_VISTA)
-  typedef ::mingw_stdthread::win32::windows7::shared_mutex native_shared_mutex;
   bool wait_impl (std::unique_lock<native_shared_mutex> & lock, DWORD time)
   {
     static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0,
@@ -445,18 +451,17 @@ public:
 };
 } //  Namespace vista
 #endif
-} //  Namespace win32
 } //  Namespace mingw_stdthread
 
 namespace std
 {
 //  Bring a selected condition variable implementation into namespace std.
 #if WINVER < 0x0600
-  using ::mingw_stdthread::win32::condition_variable;
-  using ::mingw_stdthread::win32::condition_variable_any;
+  using ::mingw_stdthread::xp::condition_variable;
+  using ::mingw_stdthread::xp::condition_variable_any;
 #else
-  using ::mingw_stdthread::win32::vista::condition_variable;
-  using ::mingw_stdthread::win32::vista::condition_variable_any;
+  using ::mingw_stdthread::vista::condition_variable;
+  using ::mingw_stdthread::vista::condition_variable_any;
 #endif
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H

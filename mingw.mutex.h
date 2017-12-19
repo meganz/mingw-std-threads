@@ -53,14 +53,15 @@
 
 namespace mingw_stdthread
 {
-namespace win32
-{
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
 namespace vista
 {
 class condition_variable;
 }
 #endif
+
+namespace xp
+{
 
 class recursive_mutex
 {
@@ -100,7 +101,7 @@ class _NonRecursive: protected B
 protected:
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
 //    Allow condition variable to unlock the native handle directly.
-    friend class ::mingw_stdthread::win32::vista::condition_variable;
+    friend class vista::condition_variable;
 #endif
     typedef B base;
     DWORD mOwnerThread;
@@ -253,15 +254,15 @@ public:
         return ret;
     }
 };
-} //  Namespace win32
+} //  Namespace xp
 } //  Namespace mingw_stdthread
 
 namespace std
 {
-using ::mingw_stdthread::win32::mutex;
-using ::mingw_stdthread::win32::timed_mutex;
-using ::mingw_stdthread::win32::recursive_mutex;
-using ::mingw_stdthread::win32::recursive_timed_mutex;
+using ::mingw_stdthread::xp::mutex;
+using ::mingw_stdthread::xp::timed_mutex;
+using ::mingw_stdthread::xp::recursive_mutex;
+using ::mingw_stdthread::xp::recursive_timed_mutex;
 // You can use the scoped locks and other helpers that are still provided by <mutex>
 // In that case, you must include <mutex> before including this file, so that this
 // file will not try to redefine them
