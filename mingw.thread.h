@@ -30,17 +30,8 @@
 #include <utility>
 #include <ostream>
 
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    It is likely that you will get class redefinition errors below, and unfortunately   \
-    this implementation can not be used standalone                                      \
-    and independent of the system <mutex> header, since it relies on it for             \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
+#if !defined(__MINGW32__) || defined(_GLIBCXX_HAS_GTHREADS)
+#include <thread>
 #endif
 
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
@@ -165,15 +156,24 @@ public:
     }
 };
 } //  Namespace xp
+using xp::thread;
+#if defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
 } //  Namespace mingw_stdthread
 
 namespace std
 {
-using ::mingw_stdthread::xp::thread;
+using ::mingw_stdthread::thread;
+#else
+#pragma message("This version of MinGW seems to include a win32 port of pthreads\
+, and probably already has C++11 std threading classes implemented, based on\
+ pthreads. If you would still like to use this implementation (as it is more\
+ lightweight), you can use the classes in namespace mingw_stdthread, rather than\
+ those in std.")
+#endif
 
 namespace this_thread
 {
-  inline std::thread::id get_id()
+  inline thread::id get_id()
   {
 //    If, for some reason (such as a programmer editing this file), std::thread
 //  and ::mingw_stdthread::xp::thread are different, this will emit a
@@ -194,7 +194,10 @@ namespace this_thread
     sleep_for(sleep_time-Clock::now());
   }
 }
+}
 
+namespace std
+{
 //  Specialization of templates is allowed in namespace std.
 template<>
 struct hash<typename ::mingw_stdthread::xp::thread::id>

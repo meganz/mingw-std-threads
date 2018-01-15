@@ -3,17 +3,24 @@
 #include <mutex>
 #include "../mingw.mutex.h"
 #include "../mingw.condition_variable.h"
+#include "../mingw.shared_mutex.h"
 #include <atomic>
 #include <assert.h>
 
 using namespace std;
 
-bool cond = false;
+int cond = 0;
 std::mutex m;
-std::condition_variable cv;
+std::shared_mutex sm;
+std::condition_variable_any cv;
 #define LOG(fmtString,...) printf(fmtString "\n", ##__VA_ARGS__); fflush(stdout)
 int main()
 {
+  if ((typeid(std::thread) != typeid(mingw_stdthread::thread)) ||
+      (typeid(std::shared_mutex) != typeid(mingw_stdthread::shared_mutex)) ||
+      (typeid(std::condition_variable) != typeid(mingw_stdthread::condition_variable)) ||
+      (typeid(std::mutex) != typeid(mingw_stdthread::mutex)))
+    LOG("Using built-in classes. Tests will not reflect status of MinGW STD threads.");
     std::thread t([](bool a, const char* b, int c)mutable
     {
         try
@@ -22,8 +29,16 @@ int main()
             assert(a && !strcmp(b, "test message") && (c == -20));
             this_thread::sleep_for(std::chrono::milliseconds(5000));
             {
-                lock_guard<mutex> lock(m);
-                cond = true;
+                lock_guard<decltype(m)> lock(m);
+                cond = 1;
+                LOG("Notifying condvar");
+                cv.notify_all();
+            }
+
+            this_thread::sleep_for(std::chrono::milliseconds(500));
+            {
+                lock_guard<decltype(sm)> lock(sm);
+                cond = 2;
                 LOG("Notifying condvar");
                 cv.notify_all();
             }
@@ -38,17 +53,25 @@ int main()
     true, "test message", -20);
     try
     {
-        LOG("Main thread: waiting on condvar...");
-        {
-            std::unique_lock<mutex> lk(m);
-            cv.wait(lk, []{ return cond;} );
-            LOG("condvar notified, cond = %d", cond);
-        }
-        LOG("Main thread: Waiting on worker join...");
+      std::unique_lock<decltype(m)> lk(m);
+      std::unique_lock<decltype(sm)> slk(sm);
+      LOG("Main thread: waiting on condvar...");
+      {
+          //std::unique_lock<decltype(m)> lk(m);
+          cv.wait(lk, []{ return cond == 1;} );
+          LOG("condvar notified, cond = %d", cond);
+      }
+      LOG("Main thread: waiting on condvar...");
+      {
+          //std::unique_lock<decltype(m)> lk(m);
+          cv.wait(slk, []{ return cond == 2;} );
+          LOG("condvar notified, cond = %d", cond);
+      }
+      LOG("Main thread: Waiting on worker join...");
 
-        t.join();
-        LOG("Main thread: Worker thread joined");
-        fflush(stdout);
+      t.join();
+      LOG("Main thread: Worker thread joined");
+      fflush(stdout);
     }
     catch(std::exception& e)
     {

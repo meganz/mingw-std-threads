@@ -31,7 +31,6 @@
 #include <atomic>
 //  For this_thread::yield
 #if defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
-#pragma message "Using native WIN32 threads for shared_mutex (" __FILE__ ")."
 #include "mingw.thread.h"
 #else
 #include <thread>
@@ -84,8 +83,7 @@ class shared_mutex
       //if ((expected & kWriteBit) || ((expected + 1) == kWriteBit))
       if (expected >= kWriteBit - 1)
       {
-        using namespace std::this_thread;
-        yield();
+        std::this_thread::yield();
         expected = atomic_.load(std::memory_order_relaxed);
         continue;
       }
@@ -124,12 +122,16 @@ class shared_mutex
   {
     using namespace std::this_thread;
 //  Might be able to use relaxed memory order...
-//  Wait for the write-lock to be unlocked.
-    while (atomic_.fetch_or(kWriteBit, std::memory_order_relaxed) & kWriteBit)
+//  Wait for the write-lock to be unlocked, then claim the write slot.
+    atomic_type current;
+    while ((current = atomic_.fetch_or(kWriteBit, std::memory_order_acquire)) & kWriteBit)
       yield();
 //  Wait for readers to finish up.
-    while (atomic_.load(std::memory_order_acquire) & (~kWriteBit))
+    while (current != kWriteBit)
+    {
       yield();
+      current = atomic_.load(std::memory_order_acquire);
+    }
   }
 
   bool try_lock (void)
@@ -226,6 +228,11 @@ class shared_mutex
 
 } //  Namespace windows7
 #endif  //  Compiling for Vista
+#if (defined(_WIN32) && (WINVER >= _WIN32_WINNT_WIN7))
+  using windows7::shared_mutex;
+#else
+  using portable::shared_mutex;
+#endif
 } //  Namespace mingw_stdthread
 
 namespace std
@@ -233,11 +240,7 @@ namespace std
 //    Though adding anything to the std namespace is generally frowned upon, the
 //  added features are only those intended for inclusion in C++17
 #if (__cplusplus < 201703L) || (defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS))
-#if (defined(_WIN32) && (WINVER >= _WIN32_WINNT_WIN7))
-  using ::mingw_stdthread::windows7::shared_mutex;
-#else
-  using ::mingw_stdthread::portable::shared_mutex;
-#endif
+  using ::mingw_stdthread::shared_mutex;
 #endif
 
 //    If not supplied by shared_mutex (eg. because C++17 is not supported), I

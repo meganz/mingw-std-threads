@@ -32,23 +32,15 @@
 #include <chrono>
 #include <system_error>
 #include <windows.h>
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    It is likely that you will get errors about redefined classes, and unfortunately    \
-    this implementation can not be used standalone and independent of the system <mutex>\
-    header, since it relies on it for                                                   \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
-#endif
 
+#if !defined(__MINGW32__) || defined(_GLIBCXX_HAS_GTHREADS)
+#include <condition_variable>
+#else
 namespace std
 {
 enum class cv_status { no_timeout, timeout };
 }
+#endif
 
 namespace mingw_stdthread
 {
@@ -451,17 +443,20 @@ public:
 };
 } //  Namespace vista
 #endif
+#if WINVER < 0x0600
+  using xp::condition_variable;
+  using xp::condition_variable_any;
+#else
+  using vista::condition_variable;
+  using vista::condition_variable_any;
+#endif
 } //  Namespace mingw_stdthread
-
+#if defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
 namespace std
 {
 //  Bring a selected condition variable implementation into namespace std.
-#if WINVER < 0x0600
-  using ::mingw_stdthread::xp::condition_variable;
-  using ::mingw_stdthread::xp::condition_variable_any;
-#else
-  using ::mingw_stdthread::vista::condition_variable;
-  using ::mingw_stdthread::vista::condition_variable_any;
-#endif
+  using ::mingw_stdthread::condition_variable;
+  using ::mingw_stdthread::condition_variable_any;
 }
+#endif
 #endif // MINGW_CONDITIONAL_VARIABLE_H
