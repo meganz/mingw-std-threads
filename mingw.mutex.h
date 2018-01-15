@@ -19,18 +19,6 @@
 
 #ifndef WIN32STDMUTEX_H
 #define WIN32STDMUTEX_H
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    You are likely to have class redefinition errors below, and unfirtunately this      \
-    implementation can not be used standalone                                           \
-    and independent of the system <mutex> header, since it relies on it for             \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
-#endif
 // Recursion checks on non-recursive locks have some performance penalty, so the user
 // may want to disable the checks in release builds. In that case, make sure they
 // are always enabled in debug builds.
@@ -43,6 +31,7 @@
 #include <chrono>
 #include <system_error>
 #include <cstdio>
+#include <mutex>
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -51,8 +40,18 @@
     #define EOWNERDEAD 133
 #endif
 
-namespace std
+namespace mingw_stdthread
 {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+namespace vista
+{
+class condition_variable;
+}
+#endif
+
+namespace xp
+{
+
 class recursive_mutex
 {
 protected:
@@ -61,6 +60,7 @@ public:
     typedef LPCRITICAL_SECTION native_handle_type;
     native_handle_type native_handle() {return &mHandle;}
     recursive_mutex() noexcept
+      : mHandle()
     {
         InitializeCriticalSection(&mHandle);
     }
@@ -83,10 +83,15 @@ public:
         return (TryEnterCriticalSection(&mHandle)!=0);
     }
 };
+
 template <class B>
 class _NonRecursive: protected B
 {
 protected:
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+//    Allow condition variable to unlock the native handle directly.
+    friend class vista::condition_variable;
+#endif
     typedef B base;
     DWORD mOwnerThread;
 public:
@@ -153,7 +158,7 @@ public:
     native_handle_type native_handle() const {return mHandle;}
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
-    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL)){}
+    recursive_timed_mutex(): mHandle(CreateMutex(nullptr, FALSE, nullptr)){}
     ~recursive_timed_mutex()
     {
         CloseHandle(mHandle);
@@ -238,6 +243,21 @@ public:
         return ret;
     }
 };
+} //  Namespace xp
+using xp::mutex;
+using xp::timed_mutex;
+using xp::recursive_mutex;
+using xp::recursive_timed_mutex;
+#if defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
+} //  Namespace mingw_stdthread
+
+namespace std
+{
+using ::mingw_stdthread::mutex;
+using ::mingw_stdthread::timed_mutex;
+using ::mingw_stdthread::recursive_mutex;
+using ::mingw_stdthread::recursive_timed_mutex;
+#endif
 // You can use the scoped locks and other helpers that are still provided by <mutex>
 // In that case, you must include <mutex> before including this file, so that this
 // file will not try to redefine them
