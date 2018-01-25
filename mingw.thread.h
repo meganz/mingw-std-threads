@@ -26,6 +26,7 @@
 #include <chrono>
 #include <system_error>
 #include <cerrno>
+#include <ostream>
 #include <process.h>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
@@ -57,6 +58,7 @@ public:
     public:
         explicit id(DWORD aId=0):mId(aId){}
         bool operator==(const id& other) const {return mId == other.mId;}
+        friend ostream& operator<<( ostream& s, const thread::id& id);
     };
 protected:
     HANDLE mHandle;
@@ -153,6 +155,12 @@ public:
         mThreadId.clear();
     }
 };
+
+ostream& operator<<( ostream& s, const thread::id& id)
+{
+    s << id.mId;
+    return s;
+}
 
 namespace this_thread
 {
