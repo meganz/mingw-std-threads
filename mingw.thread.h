@@ -27,6 +27,7 @@
 #include <system_error>
 #include <cerrno>
 #include <process.h>
+#include <ostream>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
 #error This version of MinGW seems to include a win32 port of pthreads, and probably    \
@@ -62,6 +63,16 @@ public:
         friend bool operator<=(id x, id y) noexcept {return x.mId <= y.mId; }
         friend bool operator> (id x, id y) noexcept {return x.mId >  y.mId; }
         friend bool operator>=(id x, id y) noexcept {return x.mId >= y.mId; }
+
+        template<class _CharT, class _Traits>
+        friend std::basic_ostream<_CharT, _Traits>&
+        operator<<(std::basic_ostream<_CharT, _Traits>& __out, id __id) {
+            if (__id == id()) {
+                return __out << "thread::id of a non-executing thread";
+            } else {
+                return __out << __id.mId;
+            }
+        }
     };
 protected:
     HANDLE mHandle;
