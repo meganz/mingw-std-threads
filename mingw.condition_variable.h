@@ -158,8 +158,7 @@ public:
     bool wait_for(M& lock,
        const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
     {
-        wait_for(lock, rel_time);
-        return pred();
+        return wait_until(lock, std::chrono::steady_clock::now()+rel_time, pred);
     }
     template <class M, class Clock, class Duration>
     cv_status wait_until (M& lock,
@@ -172,11 +171,10 @@ public:
       const std::chrono::time_point<Clock, Duration>& abs_time,
       Predicate pred)
     {
-        auto time = abs_time - Clock::now();
-        if (time < 0)
-            return pred();
-        else
-            return wait_for(lock, time, pred);
+        while (!pred())
+            if (wait_until(lock, abs_time) == cv_status::timeout)
+                return pred();
+        return true;
     }
 };
 class condition_variable: protected condition_variable_any
