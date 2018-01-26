@@ -55,7 +55,7 @@ public:
         void clear() {mId = 0;}
         friend class thread;
     public:
-        explicit id(DWORD aId=0):mId(aId){}
+        explicit id(DWORD aId=0) noexcept : mId(aId){}
         bool operator==(const id& other) const {return mId == other.mId;}
     };
 protected:
@@ -156,8 +156,8 @@ public:
 
 namespace this_thread
 {
-    inline thread::id get_id() {return thread::id(GetCurrentThreadId());}
-    inline void yield() {Sleep(0);}
+    inline thread::id get_id() noexcept {return thread::id(GetCurrentThreadId());}
+    inline void yield() noexcept {Sleep(0);}
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
