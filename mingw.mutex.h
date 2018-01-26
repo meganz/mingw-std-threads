@@ -43,6 +43,7 @@
 #include <chrono>
 #include <system_error>
 #include <cstdio>
+#include <atomic>
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -272,5 +273,68 @@ public:
 };
 
 #endif
+
+struct once_flag {
+private:
+
+    // Use a union to defer the initialization of the mutex to call_once
+    union {
+        std::mutex _M_mutex;
+        char _M_dummy[sizeof(_M_mutex)];
+    };
+    // Spinlock used for mutex initialization
+    std::atomic_flag _M_spinlock = ATOMIC_FLAG_INIT;
+    std::atomic_int _M_run_status; // 0: not initialized; 1: mutex initialized; 2: function called
+public:
+    /// Default constructor
+    constexpr once_flag() noexcept : _M_dummy({0}), _M_run_status(0) {}
+
+    /// Deleted copy constructor
+    once_flag(const once_flag&) = delete;
+    /// Deleted assignment operator
+    once_flag& operator=(const once_flag&) = delete;
+
+    ~once_flag() {
+        if(_M_run_status!=0) {
+            _M_mutex.~mutex();
+        }
+    }
+
+    template<typename _Callable, typename... _Args>
+    friend void
+    call_once(once_flag& __once, _Callable&& __f, _Args&&... __args);
+};
+
+/// call_once
+template<typename _Callable, typename... _Args>
+void
+call_once(once_flag& __once, _Callable&& __f, _Args&&... __args)
+{
+    // If the function has already run, quit immediately
+    if(__once._M_run_status == 2) return;
+    // We may not have the mutex yet
+    if(__once._M_run_status == 0) {
+        // Acquire the spinlock
+        while (__once._M_spinlock.test_and_set(std::memory_order_acquire));
+        // Check again; we may be the *second* thread to acquire the spinlock
+        if(__once._M_run_status==0) {
+            // Initialize the mutex
+            new(&__once._M_mutex) std::mutex;
+            __once._M_run_status = 1;
+        }
+        // Release the spinlock (std::mutex constructor is noexcept, so there's no
+        // need for fancy RAII)
+        __once._M_spinlock.clear(std::memory_order_release);
+    }
+    // Now that we are sure we have a mutex, acquire it
+    unique_lock<mutex> __l(__once._M_mutex);
+    // Check again; we may be the *second* thread to acquire the mutex
+    if(__once._M_run_status == 2) return;
+    // Call __f
+    std::bind(__f, std::forward<_Args>(__args)...)();
+    // All done
+    __once._M_run_status = 2;
+}
+
 }
 #endif // WIN32STDMUTEX_H
