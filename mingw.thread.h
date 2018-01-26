@@ -56,7 +56,12 @@ public:
         friend class thread;
     public:
         explicit id(DWORD aId=0) noexcept : mId(aId){}
-        bool operator==(const id& other) const {return mId == other.mId;}
+        friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
+        friend bool operator!=(id x, id y) noexcept {return x.mId != y.mId; }
+        friend bool operator< (id x, id y) noexcept {return x.mId <  y.mId; }
+        friend bool operator<=(id x, id y) noexcept {return x.mId <= y.mId; }
+        friend bool operator> (id x, id y) noexcept {return x.mId >  y.mId; }
+        friend bool operator>=(id x, id y) noexcept {return x.mId >= y.mId; }
     };
 protected:
     HANDLE mHandle;
