@@ -27,6 +27,7 @@
 #include <system_error>
 #include <cerrno>
 #include <process.h>
+#include <ostream>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
 #error This version of MinGW seems to include a win32 port of pthreads, and probably    \
@@ -55,8 +56,23 @@ public:
         void clear() {mId = 0;}
         friend class thread;
     public:
-        explicit id(DWORD aId=0):mId(aId){}
-        bool operator==(const id& other) const {return mId == other.mId;}
+        explicit id(DWORD aId=0) noexcept : mId(aId){}
+        friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
+        friend bool operator!=(id x, id y) noexcept {return x.mId != y.mId; }
+        friend bool operator< (id x, id y) noexcept {return x.mId <  y.mId; }
+        friend bool operator<=(id x, id y) noexcept {return x.mId <= y.mId; }
+        friend bool operator> (id x, id y) noexcept {return x.mId >  y.mId; }
+        friend bool operator>=(id x, id y) noexcept {return x.mId >= y.mId; }
+
+        template<class _CharT, class _Traits>
+        friend std::basic_ostream<_CharT, _Traits>&
+        operator<<(std::basic_ostream<_CharT, _Traits>& __out, id __id) {
+            if (__id == id()) {
+                return __out << "thread::id of a non-executing thread";
+            } else {
+                return __out << __id.mId;
+            }
+        }
     };
 protected:
     HANDLE mHandle;
@@ -130,17 +146,20 @@ public:
         std::swap(mHandle, other.mHandle);
         std::swap(mThreadId.mId, other.mThreadId.mId);
     }
+
+    static unsigned int _hardware_concurrency_helper() noexcept
+    {
+        SYSTEM_INFO sysinfo;
+        ::GetSystemInfo(&sysinfo);
+        return sysinfo.dwNumberOfProcessors;
+    }
+
     static unsigned int hardware_concurrency() noexcept
     {
-        static int ncpus = -1;
-        if (ncpus == -1)
-        {
-            SYSTEM_INFO sysinfo;
-            GetSystemInfo(&sysinfo);
-            ncpus = sysinfo.dwNumberOfProcessors;
-        }
-        return ncpus;
+        static unsigned int cached = _hardware_concurrency_helper();
+        return cached;
     }
+
     void detach()
     {
         if (!joinable())
@@ -156,8 +175,8 @@ public:
 
 namespace this_thread
 {
-    inline thread::id get_id() {return thread::id(GetCurrentThreadId());}
-    inline void yield() {Sleep(0);}
+    inline thread::id get_id() noexcept {return thread::id(GetCurrentThreadId());}
+    inline void yield() noexcept {Sleep(0);}
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
