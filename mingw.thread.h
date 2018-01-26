@@ -130,17 +130,20 @@ public:
         std::swap(mHandle, other.mHandle);
         std::swap(mThreadId.mId, other.mThreadId.mId);
     }
+
+    static unsigned int _hardware_concurrency_helper() noexcept
+    {
+        SYSTEM_INFO sysinfo;
+        ::GetSystemInfo(&sysinfo);
+        return sysinfo.dwNumberOfProcessors;
+    }
+
     static unsigned int hardware_concurrency() noexcept
     {
-        static int ncpus = -1;
-        if (ncpus == -1)
-        {
-            SYSTEM_INFO sysinfo;
-            GetSystemInfo(&sysinfo);
-            ncpus = sysinfo.dwNumberOfProcessors;
-        }
-        return ncpus;
+        static unsigned int cached = _hardware_concurrency_helper();
+        return cached;
     }
+
     void detach()
     {
         if (!joinable())
