@@ -94,7 +94,7 @@ protected:
 public:
     using typename base::native_handle_type;
     using base::native_handle;
-    _NonRecursive() noexcept :base(), mOwnerThread(0) {}
+    constexpr _NonRecursive() noexcept :base(), mOwnerThread(0) {}
     _NonRecursive (const _NonRecursive<B>&) = delete;
     _NonRecursive& operator= (const _NonRecursive<B>&) = delete;
     void lock()
@@ -284,7 +284,7 @@ class once_flag
     template<class Callable, class... Args>
     friend void call_once(once_flag& once, Callable&& f, Args&&... args);
 public:
-    once_flag(): mHasRun(false) {}
+    constexpr once_flag() noexcept: mHasRun(false) {}
 
 };
 
