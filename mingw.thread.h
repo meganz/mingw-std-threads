@@ -28,6 +28,7 @@
 #include <cerrno>
 #include <ostream>
 #include <process.h>
+#include <ostream>
 
 #ifdef _GLIBCXX_HAS_GTHREADS
 #error This version of MinGW seems to include a win32 port of pthreads, and probably    \
@@ -56,9 +57,23 @@ public:
         void clear() {mId = 0;}
         friend class thread;
     public:
-        explicit id(DWORD aId=0):mId(aId){}
-        bool operator==(const id& other) const {return mId == other.mId;}
-        friend ostream& operator<<( ostream& s, const thread::id& id);
+        explicit id(DWORD aId=0) noexcept : mId(aId){}
+        friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
+        friend bool operator!=(id x, id y) noexcept {return x.mId != y.mId; }
+        friend bool operator< (id x, id y) noexcept {return x.mId <  y.mId; }
+        friend bool operator<=(id x, id y) noexcept {return x.mId <= y.mId; }
+        friend bool operator> (id x, id y) noexcept {return x.mId >  y.mId; }
+        friend bool operator>=(id x, id y) noexcept {return x.mId >= y.mId; }
+
+        template<class _CharT, class _Traits>
+        friend std::basic_ostream<_CharT, _Traits>&
+        operator<<(std::basic_ostream<_CharT, _Traits>& __out, id __id) {
+            if (__id == id()) {
+                return __out << "thread::id of a non-executing thread";
+            } else {
+                return __out << __id.mId;
+            }
+        }
     };
 protected:
     HANDLE mHandle;
@@ -159,16 +174,10 @@ public:
     }
 };
 
-ostream& operator<<( ostream& s, const thread::id& id)
-{
-    s << id.mId;
-    return s;
-}
-
 namespace this_thread
 {
-    inline thread::id get_id() {return thread::id(GetCurrentThreadId());}
-    inline void yield() {Sleep(0);}
+    inline thread::id get_id() noexcept {return thread::id(GetCurrentThreadId());}
+    inline void yield() noexcept {Sleep(0);}
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
