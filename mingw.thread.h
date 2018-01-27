@@ -67,10 +67,14 @@ public:
 
         template<class _CharT, class _Traits>
         friend std::basic_ostream<_CharT, _Traits>&
-        operator<<(std::basic_ostream<_CharT, _Traits>& __out, id __id) {
-            if (__id == id()) {
-                return __out << "thread::id of a non-executing thread";
-            } else {
+        operator<<(std::basic_ostream<_CharT, _Traits>& __out, id __id)
+        {
+            if (__id.mId == 0)
+            {
+                return __out << "(invalid std::thread::id)";
+            }
+            else
+            {
                 return __out << __id.mId;
             }
         }
