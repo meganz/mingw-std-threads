@@ -43,6 +43,8 @@
 #include <chrono>
 #include <system_error>
 #include <cstdio>
+#include <atomic>
+#include <mutex> //need for call_once()
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -272,5 +274,31 @@ public:
 };
 
 #endif
+
+class once_flag
+{
+    mutex mMutex;
+    std::atomic_bool mHasRun;
+    once_flag(const once_flag&) = delete;
+    once_flag& operator=(const once_flag&) = delete;
+    template<class Callable, class... Args>
+    friend void call_once(once_flag& once, Callable&& f, Args&&... args);
+public:
+    once_flag(): mHasRun(false) {}
+
+};
+
+template<class Callable, class... Args>
+void call_once(once_flag& flag, Callable&& func, Args&&... args)
+{
+    if(flag.mHasRun)
+        return;
+    unique_lock<mutex> lock(flag.mMutex);
+    if(flag.mHasRun)
+        return;
+    //std::invoke seems to be not defined at least in some cases
+    func(std::forward<Args>(args)...);
+    flag.mHasRun = true;
+}
 }
 #endif // WIN32STDMUTEX_H

@@ -12,6 +12,12 @@ bool cond = false;
 std::mutex m;
 std::condition_variable cv;
 #define LOG(fmtString,...) printf(fmtString "\n", ##__VA_ARGS__); fflush(stdout)
+void test_call_once(int a, const char* str)
+{
+    LOG("test_call_once called with a=%d, str=%s", a, str);
+    this_thread::sleep_for(std::chrono::milliseconds(5000));
+}
+
 int main()
 {
     std::thread t([](bool a, const char* b, int c)mutable
@@ -54,7 +60,10 @@ int main()
     {
         LOG("EXCEPTION in main thread: %s", e.what());
     }
-
+    once_flag of;
+    call_once(of, test_call_once, 1, "test");
+    call_once(of, test_call_once, 1, "ERROR! Should not be called second time");
+    LOG("Test complete");
     return 0;
 }
 
