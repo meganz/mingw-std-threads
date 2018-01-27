@@ -172,8 +172,12 @@ public:
       Predicate pred)
     {
         while (!pred())
+        {
             if (wait_until(lock, abs_time) == cv_status::timeout)
+            {
                 return pred();
+            }
+        }
         return true;
     }
 };
