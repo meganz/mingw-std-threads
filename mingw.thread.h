@@ -3,6 +3,7 @@
 * @brief std::thread implementation for MinGW
 * (c) 2013-2016 by Mega Limited, Auckland, New Zealand
 * @author Alexander Vassilev
+* @author Yosi Zelensky
 *
 * @copyright Simplified (2-clause) BSD License.
 * You should have received a copy of the license along with this
@@ -47,6 +48,24 @@
 #define _STD_THREAD_INVALID_HANDLE 0
 namespace std
 {
+#if __cplusplus < 201703L
+// If we use a compiler without c++17 support, we define std::apply (taken from cppreference)
+namespace detail {
+	template <class F, class Tuple, std::size_t... I>
+	constexpr decltype(auto) apply_impl(F&& f, Tuple&& t, std::index_sequence<I...>)
+	{
+		return std::invoke(std::forward<F>(f), std::get<I>(std::forward<Tuple>(t))...);
+	}
+}  // namespace detail
+
+template <class F, class Tuple>
+constexpr decltype(auto) apply(F&& f, Tuple&& t)
+{
+	return detail::apply_impl(
+		std::forward<F>(f), std::forward<Tuple>(t),
+		std::make_index_sequence<std::tuple_size_v<std::remove_reference_t<Tuple>>>{});
+}
+#endif
 
 class thread
 {
@@ -100,14 +119,18 @@ public:
     template<class Function, class... Args>
     explicit thread(Function&& f, Args&&... args)
     {
-        typedef decltype(std::bind(f, args...)) Call;
-        Call* call = new Call(std::bind(f, args...));
-        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
-            (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
+		using Call = std::function<void()>;
+		auto _f = std::decay_t<Function>(std::forward<Function>(f));
+		auto _args = std::tuple<std::decay_t<Args>...>(std::forward<Args>(args)...);
+    	auto call = std::make_unique<Call>([f = std::move(_f), args = std::move(_args)]
+		{
+			std::apply(f, args);
+		});
+        mHandle = (HANDLE)_beginthreadex(nullptr, 0, threadfunc<Call>,
+            (LPVOID)call.release(), 0, (unsigned*)&(mThreadId.mId));
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
         {
             int errnum = errno;
-            delete call;
             throw std::system_error(errnum, std::generic_category());
         }
     }
