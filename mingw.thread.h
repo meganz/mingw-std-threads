@@ -56,6 +56,7 @@ public:
         DWORD mId;
         void clear() {mId = 0;}
         friend class thread;
+        friend class hash<id>;
     public:
         explicit id(DWORD aId=0) noexcept : mId(aId){}
         friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
@@ -193,6 +194,18 @@ namespace this_thread
         sleep_for(sleep_time-Clock::now());
     }
 }
+
+//  Specialization of templates is allowed in namespace std.
+template<>
+struct hash<thread::id>
+{
+    typedef thread::id argument_type;
+    typedef size_t result_type;
+    size_t operator() (const argument_type & i) const noexcept
+    {
+        return i.mId;
+    }
+};
 
 }
 #endif // WIN32STDTHREAD_H

@@ -5,6 +5,7 @@
 #include "../mingw.condition_variable.h"
 #include <atomic>
 #include <assert.h>
+#include <iostream>
 
 using namespace std;
 
@@ -20,6 +21,10 @@ void test_call_once(int a, const char* str)
 
 int main()
 {
+    LOG("Testing serialization and hashing for thread::id...");
+    std::cout << "Serialization:\t" << this_thread::get_id() << "\n";
+    std::hash<thread::id> hasher;
+    std::cout << "Hash:\t" << hasher(this_thread::get_id()) << "\n";
     std::thread t([](bool a, const char* b, int c)mutable
     {
         try
