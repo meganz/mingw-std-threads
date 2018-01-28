@@ -47,6 +47,34 @@
 #define _STD_THREAD_INVALID_HANDLE 0
 namespace std
 {
+namespace detail
+{
+    template<int...>
+    struct IntSeq {};
+
+    template<int N, int... S>
+    struct GenIntSeq : GenIntSeq<N-1, N-1, S...> { };
+
+    template<int... S>
+    struct GenIntSeq<0, S...> { typedef IntSeq<S...> type; };
+
+    // We can't define the Call struct in the function - the standard forbids template methods in that case
+    template<class Func, typename... Args>
+    struct ThreadFuncCall
+    {
+      typedef std::tuple<Args...> Tuple;
+      Tuple mArgs;
+      Func mFunc;
+      ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
+      :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
+      template <int... S>
+      void callFunc(detail::IntSeq<S...>)
+      {
+          mFunc(std::get<S>(std::forward<Tuple>(mArgs)) ...);
+      }
+    };
+
+}
 
 class thread
 {
@@ -97,12 +125,13 @@ public:
 
     thread(const thread &other)=delete;
 
-    template<class Function, class... Args>
-    explicit thread(Function&& f, Args&&... args)
+    template<class Func, typename... Args>
+    explicit thread(Func&& func, Args&&... args)
     {
-        typedef decltype(std::bind(f, args...)) Call;
-        Call* call = new Call(std::bind(f, args...));
-        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
+        typedef detail::ThreadFuncCall<Func, Args...> Call;
+        auto call = new Call(
+            std::forward<Func>(func), std::forward<Args>(args)...);
+        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call, Args...>,
             (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
         {
@@ -111,12 +140,12 @@ public:
             throw std::system_error(errnum, std::generic_category());
         }
     }
-    template <class Call>
-    static unsigned int __stdcall threadfunc(void* arg)
+    template <class Call, typename... Args>
+    static unsigned __stdcall threadfunc(void* arg)
     {
-        std::unique_ptr<Call> upCall(static_cast<Call*>(arg));
-        (*upCall)();
-        return (unsigned long)0;
+        std::unique_ptr<Call> call(static_cast<Call*>(arg));
+        call->callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
+        return 0;
     }
     bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
     void join()
