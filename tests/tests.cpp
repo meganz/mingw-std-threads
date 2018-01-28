@@ -6,6 +6,7 @@
 #include <atomic>
 #include <assert.h>
 #include <string>
+#include <iostream>
 
 using namespace std;
 
@@ -33,6 +34,10 @@ struct TestMove
 
 int main()
 {
+    LOG("Testing serialization and hashing for thread::id...");
+    std::cout << "Serialization:\t" << this_thread::get_id() << "\n";
+    std::hash<thread::id> hasher;
+    std::cout << "Hash:\t" << hasher(this_thread::get_id()) << "\n";
     std::thread t([](TestMove&& a, const char* b, int c) mutable
     {
         try
