@@ -5,6 +5,8 @@
 #include "../mingw.condition_variable.h"
 #include <atomic>
 #include <assert.h>
+#include <string>
+#include <iostream>
 
 using namespace std;
 
@@ -18,14 +20,32 @@ void test_call_once(int a, const char* str)
     this_thread::sleep_for(std::chrono::milliseconds(5000));
 }
 
+struct TestMove
+{
+    std::string mStr;
+    TestMove(const std::string& aStr): mStr(aStr){}
+    TestMove(TestMove&& other): mStr(other.mStr+" moved")
+    { printf("%s: Object moved\n", mStr.c_str()); }
+    TestMove(const TestMove& other)
+    {
+        assert(false && "TestMove: Object COPIED instead of moved");
+    }
+};
+
 int main()
 {
-    std::thread t([](bool a, const char* b, int c)mutable
+    LOG("Testing serialization and hashing for thread::id...");
+    std::cout << "Serialization:\t" << this_thread::get_id() << "\n";
+    std::hash<thread::id> hasher;
+    std::cout << "Hash:\t" << hasher(this_thread::get_id()) << "\n";
+    std::thread t([](TestMove&& a, const char* b, int c) mutable
     {
         try
         {
             LOG("Worker thread started, sleeping for a while...");
-            assert(a && !strcmp(b, "test message") && (c == -20));
+            assert(a.mStr == "move test moved" && !strcmp(b, "test message")
+               && (c == -20));
+            auto move2nd = std::move(a); //test move to final destination
             this_thread::sleep_for(std::chrono::milliseconds(5000));
             {
                 lock_guard<mutex> lock(m);
@@ -41,7 +61,7 @@ int main()
             printf("EXCEPTION in worker thread: %s\n", e.what());
         }
     },
-    true, "test message", -20);
+    TestMove("move test"), "test message", -20);
     try
     {
         LOG("Main thread: waiting on condvar...");
