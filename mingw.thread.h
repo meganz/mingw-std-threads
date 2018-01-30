@@ -20,6 +20,9 @@
 #ifndef WIN32STDTHREAD_H
 #define WIN32STDTHREAD_H
 
+//  Use the standard classes for std::, if available.
+#include <thread>
+
 #include <windows.h>
 #include <functional>
 #include <memory>
@@ -195,10 +198,6 @@ public:
     }
 };
 
-//  Contains only those objects that ought to be placed in std.
-namespace visible
-{
-using mingw_stdthread::thread;
 namespace this_thread
 {
     inline thread::id get_id() noexcept {return thread::id(GetCurrentThreadId());}
@@ -214,14 +213,25 @@ namespace this_thread
         sleep_for(sleep_time-Clock::now());
     }
 }
-} //  Namespace mingw_stdthread::visible
-using namespace visible;
 } //  Namespace mingw_stdthread
 
 namespace std
 {
-//  Push objects into std, but only if they are not already there.
-using namespace mingw_stdthread::visible;
+//    Because of quirks of the compiler, the common "using namespace std;"
+//  directive would flatten the namespaces and introduce ambiguity where there
+//  was none. Direct specification (std::), however, would be unaffected.
+//    Take the safe option, and include only in the presence of MinGW's win32
+//  implementation.
+#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+using mingw_stdthread::thread;
+//    Remove ambiguity immediately, to avoid problems arising from the above.
+//using std::thread;
+namespace this_thread
+{
+using namespace mingw_stdthread::this_thread;
+}
+#endif
+
 //    Specialize hash for this implementation's thread::id, even if the
 //  std::thread::id already has a hash.
 template<>

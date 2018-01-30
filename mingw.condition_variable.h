@@ -20,6 +20,9 @@
 
 #ifndef MINGW_CONDITIONAL_VARIABLE_H
 #define MINGW_CONDITIONAL_VARIABLE_H
+//  Use the standard classes for std::, if available.
+#include <condition_variable>
+
 #include <atomic>
 #include <assert.h>
 #include "mingw.mutex.h"
@@ -196,19 +199,20 @@ public:
     bool wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
     {        return base::wait_until(lock, abs_time, pred); }
 };
-
-//  Contains only those objects that ought to be placed in std.
-namespace visible
-{
-using mingw_stdthread::cv_status;
-using mingw_stdthread::condition_variable;
-using mingw_stdthread::condition_variable_any;
-} //  Namespace mingw_stdthread::visible
 } //  Namespace mingw_stdthread
 
 //  Push objects into std, but only if they are not already there.
 namespace std
 {
-using namespace mingw_stdthread::visible;
+//    Because of quirks of the compiler, the common "using namespace std;"
+//  directive would flatten the namespaces and introduce ambiguity where there
+//  was none. Direct specification (std::), however, would be unaffected.
+//    Take the safe option, and include only in the presence of MinGW's win32
+//  implementation.
+#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+using mingw_stdthread::cv_status;
+using mingw_stdthread::condition_variable;
+using mingw_stdthread::condition_variable_any;
+#endif
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H

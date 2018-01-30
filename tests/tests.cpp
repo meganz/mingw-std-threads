@@ -1,6 +1,5 @@
 #undef _GLIBCXX_HAS_GTHREADS
 #include "../mingw.thread.h"
-#include <mutex>
 #include "../mingw.mutex.h"
 #include "../mingw.condition_variable.h"
 #include "../mingw.shared_mutex.h"
@@ -8,6 +7,7 @@
 #include <assert.h>
 #include <string>
 #include <iostream>
+#include <windows.h>
 
 using namespace std;
 
@@ -73,8 +73,10 @@ int main()
         try
         {
             LOG("Worker thread started, sleeping for a while...");
-            assert(a.mStr == "move test moved" && !strcmp(b, "test message")
-               && (c == -20));
+//  Thread might move the string more than once.
+            assert(a.mStr.substr(0, 15) == "move test moved");
+            assert(!strcmp(b, "test message"));
+            assert(c == -20);
             auto move2nd = std::move(a); //test move to final destination
             this_thread::sleep_for(std::chrono::milliseconds(5000));
             {

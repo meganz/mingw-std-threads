@@ -40,7 +40,7 @@
 #include <shared_mutex>
 #else
 //  For defer_lock_t, adopt_lock_t, and try_to_lock_t
-#include <mutex>
+#include "mingw.mutex.h"
 #endif
 
 //  For descriptive errors.
@@ -463,27 +463,26 @@ public:
         return owns_lock();
     }
 };
-#endif  //  C++11
-
-//    Pushing objects into std:: via a using directive (eg. using namespace ...)
-//  will cause this implementation's objects to be hidden if they are already
-//  supplied by MinGW, even without preprocessor tricks.
-namespace visible
-{
-using mingw_stdthread::shared_mutex;
-using mingw_stdthread::shared_timed_mutex;
-using mingw_stdthread::shared_lock;
 
 template< class Mutex >
 void swap( shared_lock<Mutex>& lhs, shared_lock<Mutex>& rhs ) noexcept
 {
     lhs.swap(rhs);
 }
-} //  Namespace mingw_stdthread::visible
+#endif  //  C++11
 } //  Namespace mingw_stdthread
 
 namespace std
 {
-using namespace mingw_stdthread::visible;
+//    Because of quirks of the compiler, the common "using namespace std;"
+//  directive would flatten the namespaces and introduce ambiguity where there
+//  was none. Direct specification (std::), however, would be unaffected.
+//    Take the safe option, and include only in the presence of MinGW's win32
+//  implementation.
+#if (__cplusplus < 201402L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
+using mingw_stdthread::shared_mutex;
+using mingw_stdthread::shared_timed_mutex;
+using mingw_stdthread::shared_lock;
+#endif
 } //  Namespace std
 #endif // MINGW_SHARED_MUTEX_H_

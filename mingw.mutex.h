@@ -266,19 +266,21 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
     func(std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
 }
-//  Contains only those objects that ought to be placed in std.
-namespace visible
-{
-using mingw_stdthread::recursive_mutex;
-using mingw_stdthread::mutex;
-using mingw_stdthread::once_flag;
-using mingw_stdthread::call_once;
-}
 } //  Namespace mingw_stdthread
 
 //  Push objects into std, but only if they are not already there.
 namespace std
 {
-using namespace mingw_stdthread::visible;
+//    Because of quirks of the compiler, the common "using namespace std;"
+//  directive would flatten the namespaces and introduce ambiguity where there
+//  was none. Direct specification (std::), however, would be unaffected.
+//    Take the safe option, and include only in the presence of MinGW's win32
+//  implementation.
+#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+using mingw_stdthread::recursive_mutex;
+using mingw_stdthread::mutex;
+using mingw_stdthread::once_flag;
+using mingw_stdthread::call_once;
+#endif
 }
 #endif // WIN32STDMUTEX_H
