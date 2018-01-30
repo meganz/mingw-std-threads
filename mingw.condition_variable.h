@@ -26,28 +26,15 @@
 #include <chrono>
 #include <system_error>
 #include <windows.h>
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    It is likely that you will get errors about redefined classes, and unfortunately    \
-    this implementation can not be used standalone and independent of the system <mutex>\
-    header, since it relies on it for                                                   \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
-#endif
 
-namespace std
+namespace mingw_stdthread
 {
-
 enum class cv_status { no_timeout, timeout };
 class condition_variable_any
 {
 protected:
     recursive_mutex mMutex;
-    atomic<int> mNumWaiters;
+    std::atomic<int> mNumWaiters;
     HANDLE mSemaphore;
     HANDLE mWakeEvent;
 public:
@@ -65,7 +52,7 @@ protected:
     bool wait_impl(M& lock, DWORD timeout)
     {
         {
-            lock_guard<recursive_mutex> guard(mMutex);
+            std::lock_guard<recursive_mutex> guard(mMutex);
             mNumWaiters++;
         }
         lock.unlock();
@@ -109,7 +96,7 @@ public:
 
     void notify_all() noexcept
     {
-        lock_guard<recursive_mutex> lock(mMutex); //block any further wait requests until all current waiters are unblocked
+        std::lock_guard<recursive_mutex> lock(mMutex); //block any further wait requests until all current waiters are unblocked
         if (mNumWaiters.load() <= 0)
             return;
 
@@ -130,7 +117,7 @@ public:
     }
     void notify_one() noexcept
     {
-        lock_guard<recursive_mutex> lock(mMutex);
+        std::lock_guard<recursive_mutex> lock(mMutex);
         int targetWaiters = mNumWaiters.load() - 1;
         if (targetWaiters <= -1)
             return;
@@ -144,10 +131,10 @@ public:
         assert(mNumWaiters == targetWaiters);
     }
     template <class M, class Rep, class Period>
-    std::cv_status wait_for(M& lock,
+    cv_status wait_for(M& lock,
       const std::chrono::duration<Rep, Period>& rel_time)
     {
-        long long timeout = chrono::duration_cast<chrono::milliseconds>(rel_time).count();
+        long long timeout = std::chrono::duration_cast<std::chrono::milliseconds>(rel_time).count();
         if (timeout < 0)
             timeout = 0;
         bool ret = wait_impl(lock, (DWORD)timeout);
@@ -162,7 +149,7 @@ public:
     }
     template <class M, class Clock, class Duration>
     cv_status wait_until (M& lock,
-      const chrono::time_point<Clock,Duration>& abs_time)
+      const std::chrono::time_point<Clock,Duration>& abs_time)
     {
         return wait_for(lock, abs_time - Clock::now());
     }
@@ -191,23 +178,37 @@ public:
     using base::base;
     using base::notify_all;
     using base::notify_one;
-    void wait(unique_lock<mutex> &lock)
+    void wait(std::unique_lock<mutex> &lock)
     {       base::wait(lock);                               }
     template <class Predicate>
-    void wait(unique_lock<mutex>& lock, Predicate pred)
+    void wait(std::unique_lock<mutex>& lock, Predicate pred)
     {       base::wait(lock, pred);                         }
     template <class Rep, class Period>
-    std::cv_status wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
+    cv_status wait_for(std::unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
     {      return base::wait_for(lock, rel_time);           }
     template <class Rep, class Period, class Predicate>
-    bool wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
+    bool wait_for(std::unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
     {        return base::wait_for(lock, rel_time, pred);   }
     template <class Clock, class Duration>
-    cv_status wait_until (unique_lock<mutex>& lock, const chrono::time_point<Clock,Duration>& abs_time)
+    cv_status wait_until (std::unique_lock<mutex>& lock, const std::chrono::time_point<Clock,Duration>& abs_time)
     {        return base::wait_until(lock, abs_time);         }
     template <class Clock, class Duration, class Predicate>
-    bool wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
+    bool wait_until (std::unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
     {        return base::wait_until(lock, abs_time, pred); }
 };
+
+//  Contains only those objects that ought to be placed in std.
+namespace visible
+{
+using mingw_stdthread::cv_status;
+using mingw_stdthread::condition_variable;
+using mingw_stdthread::condition_variable_any;
+} //  Namespace mingw_stdthread::visible
+} //  Namespace mingw_stdthread
+
+//  Push objects into std, but only if they are not already there.
+namespace std
+{
+using namespace mingw_stdthread::visible;
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H

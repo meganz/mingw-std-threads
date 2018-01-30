@@ -19,18 +19,6 @@
 
 #ifndef WIN32STDMUTEX_H
 #define WIN32STDMUTEX_H
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    You are likely to have class redefinition errors below, and unfirtunately this      \
-    implementation can not be used standalone                                           \
-    and independent of the system <mutex> header, since it relies on it for             \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
-#endif
 // Recursion checks on non-recursive locks have some performance penalty, so the user
 // may want to disable the checks in release builds. In that case, make sure they
 // are always enabled in debug builds.
@@ -53,7 +41,7 @@
     #define EOWNERDEAD 133
 #endif
 
-namespace std
+namespace mingw_stdthread
 {
 class recursive_mutex
 {
@@ -259,12 +247,27 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
 {
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
-    unique_lock<mutex> lock(flag.mMutex);
+    std::lock_guard<mutex> lock(flag.mMutex);
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
     //std::invoke seems to be not defined at least in some cases
     func(std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
 }
+
+//  Contains only those objects that ought to be placed in std.
+namespace visible
+{
+using mingw_stdthread::recursive_mutex;
+using mingw_stdthread::mutex;
+using mingw_stdthread::once_flag;
+using mingw_stdthread::call_once;
+}
+} //  Namespace mingw_stdthread
+
+//  Push objects into std, but only if they are not already there.
+namespace std
+{
+using namespace mingw_stdthread::visible;
 }
 #endif // WIN32STDMUTEX_H
