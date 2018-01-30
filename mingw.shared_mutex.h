@@ -297,11 +297,10 @@ public:
     }
 };
 
-//    Pull lock adoption types into scope, while allowing implementation-defined
-//  lock adoption types.
-using namespace std;
-
-//    If not supplied by shared_mutex (eg. because C++17 is not supported), I
+#if __cplusplus >= 201402L
+using std::shared_lock;
+#else
+//    If not supplied by shared_mutex (eg. because C++14 is not supported), I
 //  supply the various helper classes that the header should have defined.
 template<class Mutex>
 class shared_lock
@@ -311,6 +310,7 @@ class shared_lock
 //  Reduce code redundancy
     void verify_lockable (void)
     {
+        using namespace std;
         if (mMutex == nullptr)
             throw system_error(make_error_code(errc::operation_not_permitted));
         if (mOwns)
@@ -353,13 +353,13 @@ public:
     }
 
     template< class Rep, class Period >
-    shared_lock( mutex_type& m, const chrono::duration<Rep,Period>& timeout_duration )
+    shared_lock( mutex_type& m, const std::chrono::duration<Rep,Period>& timeout_duration )
         : mMutex(&m), mOwns(m.try_lock_shared_for(timeout_duration))
     {
     }
 
     template< class Clock, class Duration >
-    shared_lock( mutex_type& m, const chrono::time_point<Clock,Duration>& timeout_time )
+    shared_lock( mutex_type& m, const std::chrono::time_point<Clock,Duration>& timeout_time )
         : mMutex(&m), mOwns(m.try_lock_shared_until(timeout_time))
     {
     }
@@ -404,7 +404,7 @@ public:
     }
 
     template< class Clock, class Duration >
-    bool try_lock_until( const chrono::time_point<Clock,Duration>& cutoff )
+    bool try_lock_until( const std::chrono::time_point<Clock,Duration>& cutoff )
     {
         verify_lockable();
         do
@@ -413,18 +413,19 @@ public:
             if (mOwns)
                 return mOwns;
         }
-        while (chrono::steady_clock::now() < cutoff);
+        while (std::chrono::steady_clock::now() < cutoff);
         return false;
     }
 
     template< class Rep, class Period >
-    bool try_lock_for (const chrono::duration<Rep,Period>& rel_time)
+    bool try_lock_for (const std::chrono::duration<Rep,Period>& rel_time)
     {
-        return try_lock_until(chrono::steady_clock::now() + rel_time);
+        return try_lock_until(std::chrono::steady_clock::now() + rel_time);
     }
 
     void unlock (void)
     {
+        using namespace std;
         if (!mOwns)
             throw system_error(make_error_code(errc::operation_not_permitted));
         mMutex->unlock_shared();
@@ -434,6 +435,7 @@ public:
 //  Modifiers
     void swap (shared_lock<Mutex> & other) noexcept
     {
+        using namespace std;
         swap(mMutex, other.mMutex);
         swap(mOwns, other.mOwns);
     }
@@ -461,6 +463,7 @@ public:
         return owns_lock();
     }
 };
+#endif  //  C++11
 
 //    Pushing objects into std:: via a using directive (eg. using namespace ...)
 //  will cause this implementation's objects to be hidden if they are already
@@ -476,7 +479,7 @@ void swap( shared_lock<Mutex>& lhs, shared_lock<Mutex>& rhs ) noexcept
 {
     lhs.swap(rhs);
 }
-} //  Namespace visible.
+} //  Namespace mingw_stdthread::visible
 } //  Namespace mingw_stdthread
 
 namespace std

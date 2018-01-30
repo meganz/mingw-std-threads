@@ -52,7 +52,7 @@ protected:
     bool wait_impl(M& lock, DWORD timeout)
     {
         {
-            std::lock_guard<recursive_mutex> guard(mMutex);
+            lock_guard<recursive_mutex> guard(mMutex);
             mNumWaiters++;
         }
         lock.unlock();
@@ -96,7 +96,7 @@ public:
 
     void notify_all() noexcept
     {
-        std::lock_guard<recursive_mutex> lock(mMutex); //block any further wait requests until all current waiters are unblocked
+        lock_guard<recursive_mutex> lock(mMutex); //block any further wait requests until all current waiters are unblocked
         if (mNumWaiters.load() <= 0)
             return;
 
@@ -117,7 +117,7 @@ public:
     }
     void notify_one() noexcept
     {
-        std::lock_guard<recursive_mutex> lock(mMutex);
+        lock_guard<recursive_mutex> lock(mMutex);
         int targetWaiters = mNumWaiters.load() - 1;
         if (targetWaiters <= -1)
             return;
@@ -178,22 +178,22 @@ public:
     using base::base;
     using base::notify_all;
     using base::notify_one;
-    void wait(std::unique_lock<mutex> &lock)
+    void wait(unique_lock<mutex> &lock)
     {       base::wait(lock);                               }
     template <class Predicate>
-    void wait(std::unique_lock<mutex>& lock, Predicate pred)
+    void wait(unique_lock<mutex>& lock, Predicate pred)
     {       base::wait(lock, pred);                         }
     template <class Rep, class Period>
-    cv_status wait_for(std::unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
+    cv_status wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time)
     {      return base::wait_for(lock, rel_time);           }
     template <class Rep, class Period, class Predicate>
-    bool wait_for(std::unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
+    bool wait_for(unique_lock<mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time, Predicate pred)
     {        return base::wait_for(lock, rel_time, pred);   }
     template <class Clock, class Duration>
-    cv_status wait_until (std::unique_lock<mutex>& lock, const std::chrono::time_point<Clock,Duration>& abs_time)
+    cv_status wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock,Duration>& abs_time)
     {        return base::wait_until(lock, abs_time);         }
     template <class Clock, class Duration, class Predicate>
-    bool wait_until (std::unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
+    bool wait_until (unique_lock<mutex>& lock, const std::chrono::time_point<Clock, Duration>& abs_time, Predicate pred)
     {        return base::wait_until(lock, abs_time, pred); }
 };
 

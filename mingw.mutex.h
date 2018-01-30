@@ -43,6 +43,18 @@
 
 namespace mingw_stdthread
 {
+//    To make this namespace equivalent to the thread-related subset of std,
+//  pull in the classes and class templates supplied by std but not by this
+//  implementation.
+using std::lock_guard;
+using std::unique_lock;
+using std::adopt_lock_t;
+using std::defer_lock_t;
+using std::try_to_lock_t;
+using std::adopt_lock;
+using std::defer_lock;
+using std::try_to_lock;
+
 class recursive_mutex
 {
 protected:
@@ -247,14 +259,13 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
 {
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
-    std::lock_guard<mutex> lock(flag.mMutex);
+    lock_guard<mutex> lock(flag.mMutex);
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
     //std::invoke seems to be not defined at least in some cases
     func(std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
 }
-
 //  Contains only those objects that ought to be placed in std.
 namespace visible
 {
