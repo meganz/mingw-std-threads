@@ -240,40 +240,6 @@ public:
         return ret;
     }
 };
-// You can use the scoped locks and other helpers that are still provided by <mutex>
-// In that case, you must include <mutex> before including this file, so that this
-// file will not try to redefine them
-#ifndef _GLIBCXX_MUTEX
-
-/// Do not acquire ownership of the mutex.
-struct defer_lock_t { };
-
- /// Try to acquire ownership of the mutex without blocking.
-struct try_to_lock_t { };
-
- /// Assume the calling thread has already obtained mutex ownership
- /// and manage it.
-struct adopt_lock_t { };
-
-constexpr defer_lock_t	defer_lock { };
-constexpr try_to_lock_t	try_to_lock { };
-constexpr adopt_lock_t	adopt_lock { };
-
-template <class M>
-class lock_guard
-{
-protected:
-    M& mMutex;
-public:
-    typedef M mutex_type;
-    lock_guard(const lock_guard&) = delete;
-    lock_guard& operator=(const lock_guard&) = delete;
-    explicit lock_guard(mutex_type& m): mMutex(m) { mMutex.lock();  }
-    lock_guard(mutex_type& m, adopt_lock_t):mMutex(m){}
-    ~lock_guard() {  mMutex.unlock();   }
-};
-
-#endif
 
 class once_flag
 {
@@ -291,14 +257,14 @@ public:
 template<class Callable, class... Args>
 void call_once(once_flag& flag, Callable&& func, Args&&... args)
 {
-    if(flag.mHasRun)
+    if (flag.mHasRun.load(std::memory_order_acquire))
         return;
     unique_lock<mutex> lock(flag.mMutex);
-    if(flag.mHasRun)
+    if (flag.mHasRun.load(std::memory_order_acquire))
         return;
     //std::invoke seems to be not defined at least in some cases
     func(std::forward<Args>(args)...);
-    flag.mHasRun = true;
+    flag.mHasRun.store(true, std::memory_order_release);
 }
 }
 #endif // WIN32STDMUTEX_H
