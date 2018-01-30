@@ -479,8 +479,10 @@ namespace std
 //  was none. Direct specification (std::), however, would be unaffected.
 //    Take the safe option, and include only in the presence of MinGW's win32
 //  implementation.
-#if (__cplusplus < 201402L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
+#if (__cplusplus < 201703L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
 using mingw_stdthread::shared_mutex;
+#endif
+#if (__cplusplus < 201402L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
 using mingw_stdthread::shared_timed_mutex;
 using mingw_stdthread::shared_lock;
 #endif
