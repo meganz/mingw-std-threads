@@ -1,16 +1,21 @@
 #undef _GLIBCXX_HAS_GTHREADS
 #include "../mingw.thread.h"
-#include <mutex>
 #include "../mingw.mutex.h"
 #include "../mingw.condition_variable.h"
+#include "../mingw.shared_mutex.h"
 #include <atomic>
 #include <assert.h>
+#include <string>
+#include <iostream>
+#include <windows.h>
 
 using namespace std;
 
-bool cond = false;
+int cond = 0;
 std::mutex m;
+std::shared_mutex sm;
 std::condition_variable cv;
+std::condition_variable_any cv_any;
 #define LOG(fmtString,...) printf(fmtString "\n", ##__VA_ARGS__); fflush(stdout)
 void test_call_once(int a, const char* str)
 {
@@ -18,20 +23,83 @@ void test_call_once(int a, const char* str)
     this_thread::sleep_for(std::chrono::milliseconds(5000));
 }
 
+struct TestMove
+{
+    std::string mStr;
+    TestMove(const std::string& aStr): mStr(aStr){}
+    TestMove(TestMove&& other): mStr(other.mStr+" moved")
+    { printf("%s: Object moved\n", mStr.c_str()); }
+    TestMove(const TestMove& other)
+    {
+        assert(false && "TestMove: Object COPIED instead of moved");
+    }
+};
+
 int main()
 {
-    std::thread t([](bool a, const char* b, int c)mutable
+//    With C++ feature level and target Windows version potentially affecting
+//  behavior, make this information visible.
+    {
+        switch (__cplusplus)
+        {
+            case 201103L: std::cout << "Compiled in C++11"; break;
+            case 201402L: std::cout << "Compiled in C++14"; break;
+            case 201703L: std::cout << "Compiled in C++17"; break;
+            default: std::cout << "Compiled in a non-conforming C++ compiler";
+        }
+        std::cout << ", targeting Windows ";
+        switch (WINVER)
+        {
+            case 0x0501: std::cout << "XP"; break;
+            case 0x0502: std::cout << "Server 2003"; break;
+            case 0x0600: std::cout << "Vista"; break;
+            case 0x0601: std::cout << "7"; break;
+            case 0x0602: std::cout << "8"; break;
+            case 0x0603: std::cout << "8.1"; break;
+            case 0x0A00: std::cout << "10"; break;
+            default: std::cout << (WINVER > 0x0A00) ? "10+" : "NT or earlier";
+        }
+        std::cout << "\n";
+    }
+
+    {
+        LOG("Testing serialization and hashing for thread::id...");
+        std::cout << "Serialization:\t" << this_thread::get_id() << "\n";
+        std::hash<thread::id> hasher;
+        std::cout << "Hash:\t" << hasher(this_thread::get_id()) << "\n";
+    }
+    std::thread t([](TestMove&& a, const char* b, int c) mutable
     {
         try
         {
             LOG("Worker thread started, sleeping for a while...");
-            assert(a && !strcmp(b, "test message") && (c == -20));
+//  Thread might move the string more than once.
+            assert(a.mStr.substr(0, 15) == "move test moved");
+            assert(!strcmp(b, "test message"));
+            assert(c == -20);
+            auto move2nd = std::move(a); //test move to final destination
             this_thread::sleep_for(std::chrono::milliseconds(5000));
             {
                 lock_guard<mutex> lock(m);
-                cond = true;
+                cond = 1;
                 LOG("Notifying condvar");
                 cv.notify_all();
+            }
+
+            this_thread::sleep_for(std::chrono::milliseconds(500));
+            {
+                lock_guard<decltype(sm)> lock(sm);
+                cond = 2;
+                LOG("Notifying condvar");
+                cv_any.notify_all();
+            }
+
+            this_thread::sleep_for(std::chrono::milliseconds(500));
+            {
+                lock_guard<decltype(sm)> lock(sm);
+                cond = 3;
+                LOG("Notifying condvar");
+                cv_any.notify_all();
             }
 
             LOG("Worker thread finishing");
@@ -41,20 +109,35 @@ int main()
             printf("EXCEPTION in worker thread: %s\n", e.what());
         }
     },
-    true, "test message", -20);
+    TestMove("move test"), "test message", -20);
     try
     {
-        LOG("Main thread: waiting on condvar...");
-        {
-            std::unique_lock<mutex> lk(m);
-            cv.wait(lk, []{ return cond;} );
-            LOG("condvar notified, cond = %d", cond);
-        }
-        LOG("Main thread: Waiting on worker join...");
+      LOG("Main thread: Locking mutex, waiting on condvar...");
+      {
+          std::unique_lock<decltype(m)> lk(m);
+          cv.wait(lk, []{ return cond >= 1;} );
+          LOG("condvar notified, cond = %d", cond);
+          assert(lk.owns_lock());
+      }
+      LOG("Main thread: Locking shared_mutex, waiting on condvar...");
+      {
+          std::unique_lock<decltype(sm)> lk(sm);
+          cv_any.wait(lk, []{ return cond >= 2;} );
+          LOG("condvar notified, cond = %d", cond);
+          assert(lk.owns_lock());
+      }
+      LOG("Main thread: Locking shared_mutex in shared mode, waiting on condvar...");
+      {
+          std::shared_lock<decltype(sm)> lk(sm);
+          cv_any.wait(lk, []{ return cond >= 3;} );
+          LOG("condvar notified, cond = %d", cond);
+          assert(lk.owns_lock());
+      }
+      LOG("Main thread: Waiting on worker join...");
 
-        t.join();
-        LOG("Main thread: Worker thread joined");
-        fflush(stdout);
+      t.join();
+      LOG("Main thread: Worker thread joined");
+      fflush(stdout);
     }
     catch(std::exception& e)
     {
@@ -66,4 +149,3 @@ int main()
     LOG("Test complete");
     return 0;
 }
-

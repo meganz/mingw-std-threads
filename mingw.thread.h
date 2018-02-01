@@ -20,6 +20,9 @@
 #ifndef WIN32STDTHREAD_H
 #define WIN32STDTHREAD_H
 
+//  Use the standard classes for std::, if available.
+#include <thread>
+
 #include <windows.h>
 #include <functional>
 #include <memory>
@@ -30,23 +33,38 @@
 #include <process.h>
 #include <ostream>
 
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    It is likely that you will get class redefinition errors below, and unfortunately   \
-    this implementation can not be used standalone                                      \
-    and independent of the system <mutex> header, since it relies on it for             \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
-#endif
-
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
 #define _STD_THREAD_INVALID_HANDLE 0
-namespace std
+namespace mingw_stdthread
 {
+namespace detail
+{
+    template<int...>
+    struct IntSeq {};
+
+    template<int N, int... S>
+    struct GenIntSeq : GenIntSeq<N-1, N-1, S...> { };
+
+    template<int... S>
+    struct GenIntSeq<0, S...> { typedef IntSeq<S...> type; };
+
+    // We can't define the Call struct in the function - the standard forbids template methods in that case
+    template<class Func, typename... Args>
+    struct ThreadFuncCall
+    {
+      typedef std::tuple<Args...> Tuple;
+      Tuple mArgs;
+      Func mFunc;
+      ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
+      :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
+      template <int... S>
+      void callFunc(detail::IntSeq<S...>)
+      {
+          mFunc(std::get<S>(std::forward<Tuple>(mArgs)) ...);
+      }
+    };
+
+}
 
 class thread
 {
@@ -56,6 +74,7 @@ public:
         DWORD mId;
         void clear() {mId = 0;}
         friend class thread;
+        friend class std::hash<id>;
     public:
         explicit id(DWORD aId=0) noexcept : mId(aId){}
         friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
@@ -97,12 +116,13 @@ public:
 
     thread(const thread &other)=delete;
 
-    template<class Function, class... Args>
-    explicit thread(Function&& f, Args&&... args)
+    template<class Func, typename... Args>
+    explicit thread(Func&& func, Args&&... args)
     {
-        typedef decltype(std::bind(f, args...)) Call;
-        Call* call = new Call(std::bind(f, args...));
-        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
+        typedef detail::ThreadFuncCall<Func, Args...> Call;
+        auto call = new Call(
+            std::forward<Func>(func), std::forward<Args>(args)...);
+        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call, Args...>,
             (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
         {
@@ -111,12 +131,12 @@ public:
             throw std::system_error(errnum, std::generic_category());
         }
     }
-    template <class Call>
-    static unsigned int __stdcall threadfunc(void* arg)
+    template <class Call, typename... Args>
+    static unsigned __stdcall threadfunc(void* arg)
     {
-        std::unique_ptr<Call> upCall(static_cast<Call*>(arg));
-        (*upCall)();
-        return (unsigned long)0;
+        std::unique_ptr<Call> call(static_cast<Call*>(arg));
+        call->callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
+        return 0;
     }
     bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
     void join()
@@ -193,6 +213,36 @@ namespace this_thread
         sleep_for(sleep_time-Clock::now());
     }
 }
+} //  Namespace mingw_stdthread
 
+namespace std
+{
+//    Because of quirks of the compiler, the common "using namespace std;"
+//  directive would flatten the namespaces and introduce ambiguity where there
+//  was none. Direct specification (std::), however, would be unaffected.
+//    Take the safe option, and include only in the presence of MinGW's win32
+//  implementation.
+#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+using mingw_stdthread::thread;
+//    Remove ambiguity immediately, to avoid problems arising from the above.
+//using std::thread;
+namespace this_thread
+{
+using namespace mingw_stdthread::this_thread;
+}
+#endif
+
+//    Specialize hash for this implementation's thread::id, even if the
+//  std::thread::id already has a hash.
+template<>
+struct hash<mingw_stdthread::thread::id>
+{
+    typedef mingw_stdthread::thread::id argument_type;
+    typedef size_t result_type;
+    size_t operator() (const argument_type & i) const noexcept
+    {
+        return i.mId;
+    }
+};
 }
 #endif // WIN32STDTHREAD_H
