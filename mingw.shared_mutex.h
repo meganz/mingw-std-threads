@@ -190,9 +190,8 @@ public:
     typedef PSRWLOCK native_handle_type;
 
     shared_mutex ()
-        : mHandle()
+        : mHandle(SRWLOCK_INIT)
     {
-        InitializeSRWLock(&mHandle);
     }
 
     ~shared_mutex () = default;

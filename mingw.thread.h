@@ -20,6 +20,10 @@
 #ifndef WIN32STDTHREAD_H
 #define WIN32STDTHREAD_H
 
+#if !defined(__cplusplus) || (__cplusplus < 201103L)
+#error A C++11 compiler is required!
+#endif
+
 //  Use the standard classes for std::, if available.
 #include <thread>
 
@@ -53,8 +57,8 @@ namespace detail
     struct ThreadFuncCall
     {
       typedef std::tuple<Args...> Tuple;
-      Tuple mArgs;
       Func mFunc;
+      Tuple mArgs;
       ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
       :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
       template <int... S>
@@ -105,7 +109,7 @@ public:
     typedef HANDLE native_handle_type;
     id get_id() const noexcept {return mThreadId;}
     native_handle_type native_handle() const {return mHandle;}
-    thread(): mHandle(_STD_THREAD_INVALID_HANDLE){}
+    thread(): mHandle(_STD_THREAD_INVALID_HANDLE), mThreadId(){}
 
     thread(thread&& other)
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
@@ -117,7 +121,7 @@ public:
     thread(const thread &other)=delete;
 
     template<class Func, typename... Args>
-    explicit thread(Func&& func, Args&&... args)
+    explicit thread(Func&& func, Args&&... args) : mHandle(), mThreadId()
     {
         typedef detail::ThreadFuncCall<Func, Args...> Call;
         auto call = new Call(

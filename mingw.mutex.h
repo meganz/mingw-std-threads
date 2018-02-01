@@ -19,6 +19,10 @@
 
 #ifndef WIN32STDMUTEX_H
 #define WIN32STDMUTEX_H
+
+#if !defined(__cplusplus) || (__cplusplus < 201103L)
+#error A C++11 compiler is required!
+#endif
 // Recursion checks on non-recursive locks have some performance penalty, so the user
 // may want to disable the checks in release builds. In that case, make sure they
 // are always enabled in debug builds.
@@ -71,7 +75,7 @@ protected:
 public:
     typedef LPCRITICAL_SECTION native_handle_type;
     native_handle_type native_handle() {return &mHandle;}
-    recursive_mutex() noexcept
+    recursive_mutex() noexcept : mHandle()
     {
         InitializeCriticalSection(&mHandle);
     }
@@ -263,7 +267,7 @@ class once_flag
     template<class Callable, class... Args>
     friend void call_once(once_flag& once, Callable&& f, Args&&... args);
 public:
-    constexpr once_flag() noexcept: mHasRun(false) {}
+    constexpr once_flag() noexcept: mMutex(), mHasRun(false) {}
 
 };
 

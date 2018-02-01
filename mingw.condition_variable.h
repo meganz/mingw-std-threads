@@ -20,6 +20,10 @@
 
 #ifndef MINGW_CONDITIONAL_VARIABLE_H
 #define MINGW_CONDITIONAL_VARIABLE_H
+
+#if !defined(__cplusplus) || (__cplusplus < 201103L)
+#error A C++11 compiler is required!
+#endif
 //  Use the standard classes for std::, if available.
 #include <condition_variable>
 
@@ -56,7 +60,8 @@ public:
     condition_variable_any(const condition_variable_any&) = delete;
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any()
-        :mNumWaiters(0), mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
+        :mMutex(), mNumWaiters(0),
+         mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
          mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL))
     {}
     ~condition_variable_any()
