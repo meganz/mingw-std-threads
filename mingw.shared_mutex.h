@@ -484,6 +484,14 @@ using mingw_stdthread::shared_mutex;
 #if (__cplusplus < 201402L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
 using mingw_stdthread::shared_timed_mutex;
 using mingw_stdthread::shared_lock;
+#elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
+#define MINGW_STDTHREAD_REDUNDANCY_WARNING
+#pragma message "This version of MinGW seems to include a win32 port of\
+ pthreads, and probably already has C++ std threading classes implemented,\
+ based on pthreads. These classes, found in namespace std, are not overridden\
+ by the mingw-std-thread library. If you would still like to use this\
+ implementation (as it is more lightweight), use the classes provided in\
+ namespace mingw_stdthread."
 #endif
 } //  Namespace std
 #endif // MINGW_SHARED_MUTEX_H_

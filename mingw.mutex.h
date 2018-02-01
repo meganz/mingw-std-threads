@@ -298,6 +298,14 @@ using mingw_stdthread::recursive_mutex;
 using mingw_stdthread::mutex;
 using mingw_stdthread::once_flag;
 using mingw_stdthread::call_once;
+#elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
+#define MINGW_STDTHREAD_REDUNDANCY_WARNING
+#pragma message "This version of MinGW seems to include a win32 port of\
+ pthreads, and probably already has C++11 std threading classes implemented,\
+ based on pthreads. These classes, found in namespace std, are not overridden\
+ by the mingw-std-thread library. If you would still like to use this\
+ implementation (as it is more lightweight), use the classes provided in\
+ namespace mingw_stdthread."
 #endif
 }
 #endif // WIN32STDMUTEX_H
