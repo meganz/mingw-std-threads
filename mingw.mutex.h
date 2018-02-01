@@ -43,6 +43,15 @@
 
 namespace mingw_stdthread
 {
+//    The _NonRecursive class has mechanisms that do not play nice with direct
+//  manipulation of the native handle. This forward declaration is part of
+//  a friend class declaration.
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+namespace vista
+{
+class condition_variable;
+}
+#endif
 //    To make this namespace equivalent to the thread-related subset of std,
 //  pull in the classes and class templates supplied by std but not by this
 //  implementation.
@@ -89,6 +98,10 @@ template <class B>
 class _NonRecursive: protected B
 {
 protected:
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+//    Allow condition variable to unlock the native handle directly.
+    friend class vista::condition_variable;
+#endif
     typedef B base;
     DWORD mOwnerThread;
 public:
