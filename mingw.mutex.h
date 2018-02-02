@@ -296,6 +296,8 @@ namespace std
 #if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
 using mingw_stdthread::recursive_mutex;
 using mingw_stdthread::mutex;
+using mingw_stdthread::recursive_timed_mutex;
+using mingw_stdthread::timed_mutex;
 using mingw_stdthread::once_flag;
 using mingw_stdthread::call_once;
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition

@@ -1,4 +1,3 @@
-#undef _GLIBCXX_HAS_GTHREADS
 #include "../mingw.thread.h"
 #include "../mingw.mutex.h"
 #include "../mingw.condition_variable.h"
@@ -34,6 +33,25 @@ struct TestMove
         assert(false && "TestMove: Object COPIED instead of moved");
     }
 };
+
+static_assert(std::is_standard_layout<std::recursive_mutex>::value, "Class\
+ std::recursive_mutex is required to satisfy the StandardLayoutType concept.");
+static_assert(std::is_standard_layout<std::recursive_timed_mutex>::value,\
+ "Class std::recursive_mutex is required to satisfy the StandardLayoutType\
+ concept.");
+#ifdef STDMUTEX_NO_RECURSION_CHECKS
+static_assert(std::is_standard_layout<std::mutex>::value, "Class std::mutex is\
+ required to satisfy the StandardLayoutType concept.");
+static_assert(std::is_standard_layout<std::timed_mutex>::value, "Class\
+ std::timed_mutex is required to satisfy the StandardLayoutType concept.");
+#else
+#pragma message "Non-recursive mutexes do not yet satisfy the StandardLayoutType\
+ concept, which is required by the standard."
+#endif
+static_assert(std::is_standard_layout<std::shared_mutex>::value, "Class\
+ std::shared_mutex is required to satisfy the StandardLayoutType concept.");
+static_assert(std::is_standard_layout<std::shared_timed_mutex>::value, "Class\
+ std::shared_timed_mutex is required to satisfy the StandardLayoutType concept.");
 
 int main()
 {
