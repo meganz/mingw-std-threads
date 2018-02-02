@@ -34,27 +34,20 @@ struct TestMove
     }
 };
 
-static_assert(std::is_standard_layout<std::recursive_mutex>::value, "Class\
- std::recursive_mutex is required to satisfy the StandardLayoutType concept.");
-static_assert(std::is_standard_layout<std::recursive_timed_mutex>::value,\
- "Class std::recursive_mutex is required to satisfy the StandardLayoutType\
- concept.");
-#ifdef STDMUTEX_NO_RECURSION_CHECKS
-static_assert(std::is_standard_layout<std::mutex>::value, "Class std::mutex is\
- required to satisfy the StandardLayoutType concept.");
-static_assert(std::is_standard_layout<std::timed_mutex>::value, "Class\
- std::timed_mutex is required to satisfy the StandardLayoutType concept.");
-#else
-#pragma message "Non-recursive mutexes do not yet satisfy the StandardLayoutType\
- concept, which is required by the standard."
-#endif
-static_assert(std::is_standard_layout<std::shared_mutex>::value, "Class\
- std::shared_mutex is required to satisfy the StandardLayoutType concept.");
-static_assert(std::is_standard_layout<std::shared_timed_mutex>::value, "Class\
- std::shared_timed_mutex is required to satisfy the StandardLayoutType concept.");
-
 int main()
 {
+    if (!is_standard_layout<mutex>::value)
+      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","mutex");
+    if (!is_standard_layout<recursive_mutex>::value)
+      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","recursive_mutex");
+    if (!is_standard_layout<timed_mutex>::value)
+      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","timed_mutex");
+    if (!is_standard_layout<recursive_timed_mutex>::value)
+      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","recursive_timed_mutex");
+    if (!is_standard_layout<shared_mutex>::value)
+      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","shared_mutex");
+    if (!is_standard_layout<shared_timed_mutex>::value)
+      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","shared_timed_mutex");
 //    With C++ feature level and target Windows version potentially affecting
 //  behavior, make this information visible.
     {
