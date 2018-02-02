@@ -40,7 +40,7 @@
 #include <shared_mutex>
 #else
 //  For defer_lock_t, adopt_lock_t, and try_to_lock_t
-#include "mingw.mutex.h"
+#include <mutex>
 #endif
 
 //  For descriptive errors.
@@ -190,8 +190,9 @@ public:
     typedef PSRWLOCK native_handle_type;
 
     shared_mutex ()
-        : mHandle(SRWLOCK_INIT)
+        : mHandle()
     {
+        InitializeSRWLock(&mHandle);
     }
 
     ~shared_mutex () = default;
@@ -296,10 +297,11 @@ public:
     }
 };
 
-#if __cplusplus >= 201402L
-using std::shared_lock;
-#else
-//    If not supplied by shared_mutex (eg. because C++14 is not supported), I
+//    Pull lock adoption types into scope, while allowing implementation-defined
+//  lock adoption types.
+using namespace std;
+
+//    If not supplied by shared_mutex (eg. because C++17 is not supported), I
 //  supply the various helper classes that the header should have defined.
 template<class Mutex>
 class shared_lock
@@ -309,7 +311,6 @@ class shared_lock
 //  Reduce code redundancy
     void verify_lockable (void)
     {
-        using namespace std;
         if (mMutex == nullptr)
             throw system_error(make_error_code(errc::operation_not_permitted));
         if (mOwns)
@@ -352,13 +353,13 @@ public:
     }
 
     template< class Rep, class Period >
-    shared_lock( mutex_type& m, const std::chrono::duration<Rep,Period>& timeout_duration )
+    shared_lock( mutex_type& m, const chrono::duration<Rep,Period>& timeout_duration )
         : mMutex(&m), mOwns(m.try_lock_shared_for(timeout_duration))
     {
     }
 
     template< class Clock, class Duration >
-    shared_lock( mutex_type& m, const std::chrono::time_point<Clock,Duration>& timeout_time )
+    shared_lock( mutex_type& m, const chrono::time_point<Clock,Duration>& timeout_time )
         : mMutex(&m), mOwns(m.try_lock_shared_until(timeout_time))
     {
     }
@@ -403,7 +404,7 @@ public:
     }
 
     template< class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point<Clock,Duration>& cutoff )
+    bool try_lock_until( const chrono::time_point<Clock,Duration>& cutoff )
     {
         verify_lockable();
         do
@@ -412,19 +413,18 @@ public:
             if (mOwns)
                 return mOwns;
         }
-        while (std::chrono::steady_clock::now() < cutoff);
+        while (chrono::steady_clock::now() < cutoff);
         return false;
     }
 
     template< class Rep, class Period >
-    bool try_lock_for (const std::chrono::duration<Rep,Period>& rel_time)
+    bool try_lock_for (const chrono::duration<Rep,Period>& rel_time)
     {
-        return try_lock_until(std::chrono::steady_clock::now() + rel_time);
+        return try_lock_until(chrono::steady_clock::now() + rel_time);
     }
 
     void unlock (void)
     {
-        using namespace std;
         if (!mOwns)
             throw system_error(make_error_code(errc::operation_not_permitted));
         mMutex->unlock_shared();
@@ -434,7 +434,6 @@ public:
 //  Modifiers
     void swap (shared_lock<Mutex> & other) noexcept
     {
-        using namespace std;
         swap(mMutex, other.mMutex);
         swap(mOwns, other.mOwns);
     }
@@ -463,35 +462,25 @@ public:
     }
 };
 
+//    Pushing objects into std:: via a using directive (eg. using namespace ...)
+//  will cause this implementation's objects to be hidden if they are already
+//  supplied by MinGW, even without preprocessor tricks.
+namespace visible
+{
+using mingw_stdthread::shared_mutex;
+using mingw_stdthread::shared_timed_mutex;
+using mingw_stdthread::shared_lock;
+
 template< class Mutex >
 void swap( shared_lock<Mutex>& lhs, shared_lock<Mutex>& rhs ) noexcept
 {
     lhs.swap(rhs);
 }
-#endif  //  C++11
+} //  Namespace visible.
 } //  Namespace mingw_stdthread
 
 namespace std
 {
-//    Because of quirks of the compiler, the common "using namespace std;"
-//  directive would flatten the namespaces and introduce ambiguity where there
-//  was none. Direct specification (std::), however, would be unaffected.
-//    Take the safe option, and include only in the presence of MinGW's win32
-//  implementation.
-#if (__cplusplus < 201703L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
-using mingw_stdthread::shared_mutex;
-#endif
-#if (__cplusplus < 201402L) || (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
-using mingw_stdthread::shared_timed_mutex;
-using mingw_stdthread::shared_lock;
-#elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
-#define MINGW_STDTHREAD_REDUNDANCY_WARNING
-#pragma message "This version of MinGW seems to include a win32 port of\
- pthreads, and probably already has C++ std threading classes implemented,\
- based on pthreads. These classes, found in namespace std, are not overridden\
- by the mingw-std-thread library. If you would still like to use this\
- implementation (as it is more lightweight), use the classes provided in\
- namespace mingw_stdthread."
-#endif
+using namespace mingw_stdthread::visible;
 } //  Namespace std
 #endif // MINGW_SHARED_MUTEX_H_

@@ -7,7 +7,8 @@ on MinGW GCC.
 Windows compatibility
 =====================
 This implementation should work with Windows XP (regardless of service pack), or newer.
-The library automatically detects the version of Windows that is being targeted, and selects an implementation that takes advantage of available Windows features. In MinGW GCC, the target Windows version may optionally be selected by the command-line option `-D _WIN32_WINNT=...`. Use `0x0600` for Windows Vista, or `0x0601` for Windows 7. See ["Modifying `WINVER` and `_WIN32_WINNT`](https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt).
+Since Vista, Windows has native condition variables, but we do not rely on them, to keep compatibility
+with Windows XP.
 
 Usage
 =====
