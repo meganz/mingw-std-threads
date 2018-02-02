@@ -36,7 +36,7 @@
 #include <system_error>
 #include <cstdio>
 #include <atomic>
-#include <mutex> //need for call_once()
+#include <mutex> //need for lock_guard
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -294,20 +294,26 @@ namespace std
 //    Take the safe option, and include only in the presence of MinGW's win32
 //  implementation.
 #if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
-using mingw_stdthread::recursive_mutex;
-using mingw_stdthread::mutex;
-using mingw_stdthread::recursive_timed_mutex;
-using mingw_stdthread::timed_mutex;
-using mingw_stdthread::once_flag;
-using mingw_stdthread::call_once;
+  using mingw_stdthread::recursive_mutex;
+  using mingw_stdthread::mutex;
+  using mingw_stdthread::recursive_timed_mutex;
+  using mingw_stdthread::timed_mutex;
+  using mingw_stdthread::once_flag;
+  using mingw_stdthread::call_once;
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
-#define MINGW_STDTHREAD_REDUNDANCY_WARNING
-#pragma message "This version of MinGW seems to include a win32 port of\
- pthreads, and probably already has C++11 std threading classes implemented,\
- based on pthreads. These classes, found in namespace std, are not overridden\
- by the mingw-std-thread library. If you would still like to use this\
- implementation (as it is more lightweight), use the classes provided in\
- namespace mingw_stdthread."
+  #define MINGW_STDTHREAD_REDUNDANCY_WARNING
+  #ifdef __MINGW32__
+    #pragma message "This version of MinGW seems to include a win32 port of\
+     pthreads, and probably already has C++11 std threading classes implemented,\
+     based on pthreads."
+  #else
+    #pragma message "You are using a non-MinGW compiler that probably already has std threading\
+     classes"
+  #endif
+  #pragma message "These classes, found in namespace std, are not overridden\
+   by the mingw-std-thread library. If you would still like to use this\
+   implementation (as it is more lightweight), the classes are provided in\
+   namespace mingw_stdthread."
 #endif
 }
 #endif // WIN32STDMUTEX_H

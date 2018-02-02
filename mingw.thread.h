@@ -24,9 +24,6 @@
 #error A C++11 compiler is required!
 #endif
 
-//  Use the standard classes for std::, if available.
-#include <thread>
-
 #include <windows.h>
 #include <functional>
 #include <memory>
@@ -226,22 +223,27 @@ namespace std
 //  was none. Direct specification (std::), however, would be unaffected.
 //    Take the safe option, and include only in the presence of MinGW's win32
 //  implementation.
-#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+#if defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
+
 using mingw_stdthread::thread;
-//    Remove ambiguity immediately, to avoid problems arising from the above.
-//using std::thread;
 namespace this_thread
 {
-using namespace mingw_stdthread::this_thread;
+    using namespace mingw_stdthread::this_thread;
 }
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
-#define MINGW_STDTHREAD_REDUNDANCY_WARNING
-#pragma message "This version of MinGW seems to include a win32 port of\
- pthreads, and probably already has C++11 std threading classes implemented,\
- based on pthreads. These classes, found in namespace std, are not overridden\
- by the mingw-std-thread library. If you would still like to use this\
- implementation (as it is more lightweight), use the classes provided in\
- namespace mingw_stdthread."
+  #define MINGW_STDTHREAD_REDUNDANCY_WARNING
+  #ifdef __MINGW32__
+    #pragma message "This version of MinGW seems to include a win32 port of\
+     pthreads, and probably already has C++11 std threading classes implemented,\
+     based on pthreads."
+  #else
+    #pragma message "You are using a non-MinGW compiler that probably already has std threading\
+     classes"
+  #endif
+  #pragma message "These classes, found in namespace std, are not overridden\
+   by the mingw-std-thread library. If you would still like to use this\
+   implementation (as it is more lightweight), the classes are provided in\
+   namespace mingw_stdthread."
 #endif
 
 //    Specialize hash for this implementation's thread::id, even if the

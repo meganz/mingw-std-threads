@@ -24,8 +24,6 @@
 #if !defined(__cplusplus) || (__cplusplus < 201103L)
 #error A C++11 compiler is required!
 #endif
-//  Use the standard classes for std::, if available.
-#include <condition_variable>
 
 #include <atomic>
 #include <assert.h>
@@ -486,13 +484,19 @@ using mingw_stdthread::cv_status;
 using mingw_stdthread::condition_variable;
 using mingw_stdthread::condition_variable_any;
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
-#define MINGW_STDTHREAD_REDUNDANCY_WARNING
-#pragma message "This version of MinGW seems to include a win32 port of\
- pthreads, and probably already has C++11 std threading classes implemented,\
- based on pthreads. These classes, found in namespace std, are not overridden\
- by the mingw-std-thread library. If you would still like to use this\
- implementation (as it is more lightweight), use the classes provided in\
- namespace mingw_stdthread."
+  #define MINGW_STDTHREAD_REDUNDANCY_WARNING
+  #ifdef __MINGW32__
+    #pragma message "This version of MinGW seems to include a win32 port of\
+     pthreads, and probably already has C++11 std threading classes implemented,\
+     based on pthreads."
+  #else
+    #pragma message "You are using a non-MinGW compiler that probably already has std threading\
+     classes"
+  #endif
+  #pragma message "These classes, found in namespace std, are not overridden\
+   by the mingw-std-thread library. If you would still like to use this\
+   implementation (as it is more lightweight), the classes are provided in\
+   namespace mingw_stdthread."
 #endif
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H
