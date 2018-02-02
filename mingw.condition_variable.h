@@ -20,6 +20,10 @@
 
 #ifndef MINGW_CONDITIONAL_VARIABLE_H
 #define MINGW_CONDITIONAL_VARIABLE_H
+
+#if !defined(__cplusplus) || (__cplusplus < 201103L)
+#error A C++11 compiler is required!
+#endif
 //  Use the standard classes for std::, if available.
 #include <condition_variable>
 
@@ -56,7 +60,8 @@ public:
     condition_variable_any(const condition_variable_any&) = delete;
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any()
-        :mNumWaiters(0), mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
+        :mMutex(), mNumWaiters(0),
+         mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
          mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL))
     {}
     ~condition_variable_any()
@@ -480,6 +485,14 @@ namespace std
 using mingw_stdthread::cv_status;
 using mingw_stdthread::condition_variable;
 using mingw_stdthread::condition_variable_any;
+#elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
+#define MINGW_STDTHREAD_REDUNDANCY_WARNING
+#pragma message "This version of MinGW seems to include a win32 port of\
+ pthreads, and probably already has C++11 std threading classes implemented,\
+ based on pthreads. These classes, found in namespace std, are not overridden\
+ by the mingw-std-thread library. If you would still like to use this\
+ implementation (as it is more lightweight), use the classes provided in\
+ namespace mingw_stdthread."
 #endif
 }
 #endif // MINGW_CONDITIONAL_VARIABLE_H
