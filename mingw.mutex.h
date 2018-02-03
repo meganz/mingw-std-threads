@@ -260,28 +260,42 @@ public:
 
 class once_flag
 {
-    mutex mMutex;
-    std::atomic_bool mHasRun;
+    std::atomic_uchar mRunState;
     once_flag(const once_flag&) = delete;
     once_flag& operator=(const once_flag&) = delete;
     template<class Callable, class... Args>
     friend void call_once(once_flag& once, Callable&& f, Args&&... args);
 public:
-    constexpr once_flag() noexcept: mMutex(), mHasRun(false) {}
-
+    constexpr once_flag() noexcept: mRunState(0) {}
 };
 
 template<class Callable, class... Args>
 void call_once(once_flag& flag, Callable&& func, Args&&... args)
 {
-    if (flag.mHasRun.load(std::memory_order_acquire))
-        return;
-    lock_guard<mutex> lock(flag.mMutex);
-    if (flag.mHasRun.load(std::memory_order_acquire))
-        return;
-    //std::invoke seems to be not defined at least in some cases
-    func(std::forward<Args>(args)...);
-    flag.mHasRun.store(true, std::memory_order_release);
+    unsigned char flag_value = flag.mRunState.load(std::memory_order_acquire);
+
+    do
+    {
+        if (flag_value == 2)
+            return;
+        flag_value = 0;
+    } while (!flag.mRunState.compare_exchange_weak(flag_value,1,
+                                                   std::memory_order_acquire,
+                                                   std::memory_order_relaxed));
+    try
+    {
+#if (__cplusplus >= 201703L)
+        std::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
+#else
+        func(std::forward<Args>(args)...);
+#endif
+    }
+    catch (...)
+    {
+        flag.mRunState.store(0,std::memory_order_release);
+        throw;
+    }
+    flag.mRunState.store(2,std::memory_order_release);
 }
 } //  Namespace mingw_stdthread
 
