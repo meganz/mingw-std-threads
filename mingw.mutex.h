@@ -38,6 +38,10 @@
 #include <atomic>
 #include <mutex> //need for call_once()
 
+#ifdef STDMUTEX_NO_RECURSION_CHECKS
+#include "mingw.thread.h" //  Need for yield in spinlock
+#endif
+
 #ifndef EPROTO
     #define EPROTO 134
 #endif
@@ -258,6 +262,8 @@ public:
     }
 };
 
+namespace portable
+{
 class once_flag
 {
     std::atomic_uchar mRunState;
@@ -278,8 +284,9 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
     {
         if (flag_value == 2)
             return;
+        this_thread::yield();
         flag_value = 0;
-    } while (!flag.mRunState.compare_exchange_weak(flag_value,1,
+    } while (!flag.mRunState.compare_exchange_strong(flag_value,1,
                                                    std::memory_order_acquire,
                                                    std::memory_order_relaxed));
     try
@@ -297,6 +304,43 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
     }
     flag.mRunState.store(2,std::memory_order_release);
 }
+}
+#ifdef STDMUTEX_NO_RECURSION_CHECKS
+//    Patch an error by using a purely atomics-based solution, rather than
+//  relying on the mutex implementation. The mutex class should be fixed ASAP.
+using portable::once_flag;
+using portable::call_once;
+#else
+class once_flag
+{
+    mutex mMutex;
+    std::atomic_bool mHasRun;
+    once_flag(const once_flag&) = delete;
+    once_flag& operator=(const once_flag&) = delete;
+    template<class Callable, class... Args>
+    friend void call_once(once_flag& once, Callable&& f, Args&&... args);
+public:
+    constexpr once_flag() noexcept: mMutex(), mHasRun(false) {}
+};
+
+template<class Callable, class... Args>
+void call_once(once_flag& flag, Callable&& func, Args&&... args)
+{
+    if (flag.mHasRun.load(std::memory_order_acquire))
+        return;
+    lock_guard<mutex> lock(flag.mMutex);
+    if (flag.mHasRun.load(std::memory_order_acquire))
+        return;
+//    std::invoke seems to be not defined at least in some cases. Use it if it's
+//  available, or skip it if it's not.
+#if (__cplusplus >= 201703L)
+    std::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
+#else
+    func(std::forward<Args>(args)...);
+#endif
+    flag.mHasRun.store(true, std::memory_order_release);
+}
+#endif
 } //  Namespace mingw_stdthread
 
 //  Push objects into std, but only if they are not already there.
