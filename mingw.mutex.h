@@ -39,9 +39,7 @@
 #include <mutex> //need for call_once()
 #include <assert.h>
 
-#ifdef STDMUTEX_NO_RECURSION_CHECKS
 #include "mingw.thread.h" //  Need for yield in spinlock
-#endif
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -271,12 +269,14 @@ public:
     {
         unsigned char state = mState.load(std::memory_order_acquire);
         while (state) {
-            if ((state == 2) && mState.compare_exchange_strong(state, 1, std::memory_order_relaxed))
+            if ((state == 2) && mState.compare_exchange_weak(state, 1, std::memory_order_acquire))
             {
                 InitializeCriticalSection(&mHandle);
                 mState.store(0, std::memory_order_release);
                 break;
             }
+            if (state == 1)
+                this_thread::yield();
         }
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
@@ -297,7 +297,7 @@ public:
     bool try_lock (void)
     {
         unsigned char state = mState.load(std::memory_order_acquire);
-        if ((state == 2) && mState.compare_exchange_strong(state, 1, std::memory_order_relaxed))
+        if ((state == 2) && mState.compare_exchange_strong(state, 1, std::memory_order_acquire))
         {
             InitializeCriticalSection(&mHandle);
             mState.store(0, std::memory_order_release);
