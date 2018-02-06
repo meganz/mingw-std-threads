@@ -242,26 +242,46 @@ class condition_variable
 protected:
     CONDITION_VARIABLE cvariable_;
 
-    bool wait_impl (unique_lock<mutex> & lock, DWORD time)
-    {
-        static_assert(std::is_same<typename mutex::native_handle_type, PCRITICAL_SECTION>::value,
-                      "Native Win32 condition variable requires std::mutex to use  \
-                   native Win32 critical section objects.");
-        mutex * pmutex = lock.release();
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-#if (__cplusplus < 201402L)
-        if (pmutex->mOwnerThread != GetCurrentThreadId())
-            throw std::system_error(std::make_error_code(std::errc::resource_deadlock_would_occur));
+    template<typename MTX>
+    inline static void before_wait (MTX * pmutex)
+    {
+        pmutex->mOwnerThread.checkSetOwnerBeforeUnlock();
+    }
+    template<typename MTX>
+    inline static void after_wait (MTX * pmutex)
+    {
+        pmutex->mOwnerThread.setOwnerAfterLock(GetCurrentThreadId());
+    }
+#else
+    inline static void before_wait (void *) { }
+    inline static void after_wait (void *) { }
 #endif
-        pmutex->mOwnerThread = 0;
-#endif
+
+    bool wait_impl (unique_lock<xp::mutex> & lock, DWORD time)
+    {
+        static_assert(std::is_same<typename xp::mutex::native_handle_type, PCRITICAL_SECTION>::value,
+                      "Native Win32 condition variable requires std::mutex to \
+use native Win32 critical section objects.");
+        xp::mutex * pmutex = lock.release();
+        before_wait(pmutex);
         BOOL success = SleepConditionVariableCS(&cvariable_,
                                                 pmutex->native_handle(),
                                                 time);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
-        pmutex->mOwnerThread = GetCurrentThreadId();
-#endif
-        lock = unique_lock<mutex>(*pmutex, adopt_lock);
+        after_wait(pmutex);
+        lock = unique_lock<xp::mutex>(*pmutex, adopt_lock);
+        return success;
+    }
+
+    bool wait_impl (unique_lock<windows7::mutex> & lock, DWORD time)
+    {
+        windows7::mutex * pmutex = lock.release();
+        before_wait(pmutex);
+        BOOL success = SleepConditionVariableSRW( native_handle(),
+                                                  pmutex->native_handle(),
+                                                  time, 0);
+        after_wait(pmutex);
+        lock = unique_lock<windows7::mutex>(*pmutex, adopt_lock);
         return success;
     }
 public:
@@ -373,13 +393,13 @@ protected:
 //    Some shared_mutex functionality is available even in Vista, but it's not
 //  until Windows 7 that a full implementation is natively possible. The class
 //  itself is defined, with missing features, at the Vista feature level.
+    static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0, "The flag \
+CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The flag for \
+exclusive mode is unknown (not specified by Microsoft Dev Center), but assumed \
+to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
 //#if (WINVER >= _WIN32_WINNT_VISTA)
     bool wait_impl (unique_lock<native_shared_mutex> & lock, DWORD time)
     {
-        static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0,
-                  "Flag CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as   \
-                  expected. Flag for exclusive mode is unknown (not specified  \
-                  by Microsoft Dev Center).");
         native_shared_mutex * pmutex = lock.release();
         BOOL success = SleepConditionVariableSRW( base::native_handle(),
                        pmutex->native_handle(), time, 0);
