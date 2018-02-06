@@ -37,6 +37,7 @@
 #include <cstdio>
 #include <atomic>
 #include <mutex> //need for call_once()
+#include <assert.h>
 
 #ifdef STDMUTEX_NO_RECURSION_CHECKS
 #include "mingw.thread.h" //  Need for yield in spinlock
@@ -102,7 +103,42 @@ public:
         return (TryEnterCriticalSection(&mHandle)!=0);
     }
 };
-template <class B>
+
+struct _OwnerThread
+{
+//    If this is to be read before locking, then the owner-thread variable must
+//  be atomic to prevent a torn read from spuriously causing errors.
+    std::atomic<DWORD> mOwnerThread;
+    constexpr _OwnerThread () noexcept : mOwnerThread(0) {}
+    DWORD checkOwnerBeforeLock() const
+    {
+        DWORD self = GetCurrentThreadId();
+        if (mOwnerThread.load(std::memory_order_relaxed) == self)
+        {
+            std::fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex detected. Throwing system exception\n");
+            std::fflush(stderr);
+            throw std::system_error(EDEADLK, std::generic_category());
+        }
+        return self;
+    }
+    void setOwnerAfterLock(DWORD id)
+    {
+        mOwnerThread.store(id, std::memory_order_relaxed);
+    }
+    void checkSetOwnerBeforeUnlock()
+    {
+        DWORD self = GetCurrentThreadId();
+        if (mOwnerThread.load(std::memory_order_relaxed) != self)
+        {
+            std::fprintf(stderr, "FATAL: Recursive unlocking of non-recursive mutex detected. Throwing system exception\n");
+            std::fflush(stderr);
+            throw std::system_error(EDEADLK, std::generic_category());
+        }
+        mOwnerThread.store(0, std::memory_order_relaxed);
+    }
+};
+
+/*template <class B>
 class _NonRecursive: protected B
 {
 protected:
@@ -111,72 +147,206 @@ protected:
     friend class vista::condition_variable;
 #endif
     typedef B base;
-    DWORD mOwnerThread;
+    _OwnerThread mOwnerThread;
 public:
     using typename base::native_handle_type;
     using base::native_handle;
-    constexpr _NonRecursive() noexcept :base(), mOwnerThread(0) {}
+    constexpr _NonRecursive() noexcept :base(), mOwnerThread() {}
     _NonRecursive (const _NonRecursive<B>&) = delete;
     _NonRecursive& operator= (const _NonRecursive<B>&) = delete;
     void lock()
     {
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
         base::lock();
-        checkSetOwnerAfterLock();
+        mOwnerThread.setOwnerAfterLock(self);
     }
-protected:
-    void checkSetOwnerAfterLock()
-    {
-        DWORD self = GetCurrentThreadId();
-        if (mOwnerThread == self)
-        {
-            std::fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex detected. Throwing system exception\n");
-            std::fflush(stderr);
-            throw std::system_error(EDEADLK, std::generic_category());
-        }
-        mOwnerThread = self;
-    }
-    void checkSetOwnerBeforeUnlock()
-    {
-        DWORD self = GetCurrentThreadId();
-        if (mOwnerThread != self)
-        {
-            std::fprintf(stderr, "FATAL: Recursive unlocking of non-recursive mutex detected. Throwing system exception\n");
-            std::fflush(stderr);
-            throw std::system_error(EDEADLK, std::generic_category());
-        }
-        mOwnerThread = 0;
-    }
-public:
     void unlock()
     {
-        checkSetOwnerBeforeUnlock();
+        mOwnerThread.checkSetOwnerBeforeUnlock();
         base::unlock();
     }
     bool try_lock()
     {
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
         bool ret = base::try_lock();
         if (ret)
-            checkSetOwnerAfterLock();
+            mOwnerThread.setOwnerAfterLock(self);
         return ret;
     }
-};
+};*/
 
+//    Though the Slim Reader-Writer (SRW) locks used here are not complete until
+//  Windows 7, implementing partial functionality in Vista will simplify the
+//  interaction with condition variables.
+#if defined(_WIN32) && (WINVER >= _WIN32_WINNT_VISTA)
+namespace windows7
+{
+class mutex
+{
+    SRWLOCK mHandle;
+//  Track locking thread for error checking.
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+    friend class vista::condition_variable;
+    _OwnerThread mOwnerThread;
+#endif
+public:
+    typedef PSRWLOCK native_handle_type;
+    constexpr mutex () noexcept : mHandle(SRWLOCK_INIT)
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        , mOwnerThread()
+#endif
+    { }
+    mutex (const mutex&) = delete;
+    mutex & operator= (const mutex&) = delete;
+    void lock (void)
+    {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+#endif
+        AcquireSRWLockExclusive(&mHandle);
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        mOwnerThread.setOwnerAfterLock(self);
+#endif
+    }
+    void unlock (void)
+    {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        mOwnerThread.checkSetOwnerBeforeUnlock();
+#endif
+        ReleaseSRWLockExclusive(&mHandle);
+    }
+//  TryAcquireSRW functions are a Windows 7 feature.
+#if (WINVER >= _WIN32_WINNT_WIN7)
+    bool try_lock (void)
+    {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+#endif
+        BOOL ret = TryAcquireSRWLockExclusive(&mHandle);
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        if (ret)
+            mOwnerThread.setOwnerAfterLock(self);
+#endif
+        return ret;
+    }
+#endif
+    native_handle_type native_handle (void)
+    {
+        return &mHandle;
+    }
+};
+} //  Namespace windows7
+#endif  //  Compiling for Vista
+namespace xp
+{
+/*
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
     typedef _NonRecursive<recursive_mutex> mutex;
 #else
     typedef recursive_mutex mutex;
+#endif*/
+class mutex
+{
+    CRITICAL_SECTION mHandle;
+    std::atomic_uchar mState;
+//  Track locking thread for error checking.
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+    friend class vista::condition_variable;
+    _OwnerThread mOwnerThread;
+#endif
+public:
+    typedef PCRITICAL_SECTION native_handle_type;
+    constexpr mutex () noexcept : mHandle(), mState(2)
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        , mOwnerThread()
+#endif
+    { }
+    mutex (const mutex&) = delete;
+    mutex & operator= (const mutex&) = delete;
+    ~mutex() noexcept
+    {
+        DeleteCriticalSection(&mHandle);
+    }
+    void lock (void)
+    {
+        unsigned char state = mState.load(std::memory_order_acquire);
+        while (state) {
+            if ((state == 2) && mState.compare_exchange_strong(state, 1, std::memory_order_relaxed))
+            {
+                InitializeCriticalSection(&mHandle);
+                mState.store(0, std::memory_order_release);
+                break;
+            }
+        }
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+#endif
+        EnterCriticalSection(&mHandle);
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        mOwnerThread.setOwnerAfterLock(self);
+#endif
+    }
+    void unlock (void)
+    {
+        assert(mState.load(std::memory_order_relaxed) == 0);
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        mOwnerThread.checkSetOwnerBeforeUnlock();
+#endif
+        LeaveCriticalSection(&mHandle);
+    }
+    bool try_lock (void)
+    {
+        unsigned char state = mState.load(std::memory_order_acquire);
+        if ((state == 2) && mState.compare_exchange_strong(state, 1, std::memory_order_relaxed))
+        {
+            InitializeCriticalSection(&mHandle);
+            mState.store(0, std::memory_order_release);
+        }
+        if (state == 1)
+            return false;
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+#endif
+        BOOL ret = TryEnterCriticalSection(&mHandle);
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        if (ret)
+            mOwnerThread.setOwnerAfterLock(self);
+#endif
+        return ret;
+    }
+    native_handle_type native_handle (void)
+    {
+        return &mHandle;
+    }
+};
+}
+#if (WINVER >= _WIN32_WINNT_WIN7)
+using windows7::mutex;
+#else
+using xp::mutex;
 #endif
 
 class recursive_timed_mutex
 {
 protected:
     HANDLE mHandle;
+//    Track locking thread for error checking of non-recursive timed_mutex. For
+//  standard compliance, this must be defined in same class and at the same
+//  access-control level as every other variable in the timed_mutex.
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+    friend class vista::condition_variable;
+    _OwnerThread mOwnerThread;
+#endif
 public:
     typedef HANDLE native_handle_type;
     native_handle_type native_handle() const {return mHandle;}
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
-    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL)){}
+    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL))
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        , mOwnerThread()
+#endif
+    {}
     ~recursive_timed_mutex()
     {
         CloseHandle(mHandle);
@@ -231,86 +401,58 @@ public:
     }
 };
 
-class timed_mutex: public _NonRecursive<recursive_timed_mutex>
+//  Override if, and only if, it is necessary for error-checking.
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+class timed_mutex: public recursive_timed_mutex
 {
 protected:
-    typedef _NonRecursive<recursive_timed_mutex> base;
+    typedef recursive_timed_mutex base;
 public:
     using base::base;
     timed_mutex(const timed_mutex&) = delete;
     timed_mutex& operator=(const timed_mutex&) = delete;
+    void lock()
+    {
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+        base::lock();
+        mOwnerThread.setOwnerAfterLock(self);
+    }
+    void unlock()
+    {
+        mOwnerThread.checkSetOwnerBeforeUnlock();
+        base::unlock();
+    }
+    bool try_lock ()
+    {
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+        bool ret = base::try_lock();
+        if (ret)
+            mOwnerThread.setOwnerAfterLock(self);
+        return ret;
+    }
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
         bool ret = base::try_lock_for(dur);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
-            checkSetOwnerAfterLock();
-#endif
+            mOwnerThread.setOwnerAfterLock(self);
         return ret;
     }
-public:
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
     {
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
         bool ret = base::try_lock_until(timeout_time);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
-            checkSetOwnerAfterLock();
-#endif
+            mOwnerThread.setOwnerAfterLock(self);
         return ret;
     }
 };
-
-namespace portable
-{
-class once_flag
-{
-    std::atomic_uchar mRunState;
-    once_flag(const once_flag&) = delete;
-    once_flag& operator=(const once_flag&) = delete;
-    template<class Callable, class... Args>
-    friend void call_once(once_flag& once, Callable&& f, Args&&... args);
-public:
-    constexpr once_flag() noexcept: mRunState(0) {}
-};
-
-template<class Callable, class... Args>
-void call_once(once_flag& flag, Callable&& func, Args&&... args)
-{
-    unsigned char flag_value = flag.mRunState.load(std::memory_order_acquire);
-
-    do
-    {
-        if (flag_value == 2)
-            return;
-        this_thread::yield();
-        flag_value = 0;
-    } while (!flag.mRunState.compare_exchange_strong(flag_value,1,
-                                                   std::memory_order_acquire,
-                                                   std::memory_order_relaxed));
-    try
-    {
-#if (__cplusplus >= 201703L)
-        std::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
 #else
-        func(std::forward<Args>(args)...);
+typedef recursive_timed_mutex timed_mutex;
 #endif
-    }
-    catch (...)
-    {
-        flag.mRunState.store(0,std::memory_order_release);
-        throw;
-    }
-    flag.mRunState.store(2,std::memory_order_release);
-}
-}
-#ifdef STDMUTEX_NO_RECURSION_CHECKS
-//    Patch an error by using a purely atomics-based solution, rather than
-//  relying on the mutex implementation. The mutex class should be fixed ASAP.
-using portable::once_flag;
-using portable::call_once;
-#else
+
 class once_flag
 {
     mutex mMutex;
@@ -340,7 +482,6 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
 #endif
     flag.mHasRun.store(true, std::memory_order_release);
 }
-#endif
 } //  Namespace mingw_stdthread
 
 //  Push objects into std, but only if they are not already there.
