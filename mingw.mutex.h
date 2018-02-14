@@ -39,7 +39,9 @@
 #include <mutex> //need for call_once()
 #include <assert.h>
 
-#include "mingw.thread.h" //  Need for yield in spinlock
+//  Need for yield in spinlock and the implementation of invoke
+#include "mingw.thread.h"
+
 
 #ifndef EPROTO
     #define EPROTO 134
@@ -473,13 +475,7 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
     lock_guard<mutex> lock(flag.mMutex);
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
-//    std::invoke seems to be not defined at least in some cases. Use it if it's
-//  available, or skip it if it's not.
-#if (__cplusplus >= 201703L)
-    std::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
-#else
-    func(std::forward<Args>(args)...);
-#endif
+    detail::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
 }
 } //  Namespace mingw_stdthread
