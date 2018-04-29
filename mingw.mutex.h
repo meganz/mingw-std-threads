@@ -278,7 +278,10 @@ public:
                 break;
             }
             if (state == 1)
+            {
                 this_thread::yield();
+                state = mState.load(std::memory_order_acquire);
+            }
         }
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
