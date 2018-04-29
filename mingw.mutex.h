@@ -457,7 +457,14 @@ typedef recursive_timed_mutex timed_mutex;
 
 class once_flag
 {
+//    When available, the SRW-based mutexes should be faster than the
+//  CriticalSection-based mutexes. Only try_lock will be unavailable in Vista,
+//  and try_lock is not used by once_flag.
+#if (_WIN32_WINNT == _WIN32_WINNT_VISTA)
+    windows7::mutex mMutex;
+#else
     mutex mMutex;
+#endif
     std::atomic_bool mHasRun;
     once_flag(const once_flag&) = delete;
     once_flag& operator=(const once_flag&) = delete;
@@ -472,7 +479,7 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
 {
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
-    lock_guard<mutex> lock(flag.mMutex);
+    lock_guard<decltype(flag.mMutex)> lock(flag.mMutex);
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
     detail::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
