@@ -44,6 +44,10 @@ using std::cv_status;
 #endif
 namespace xp
 {
+//    Include the XP-compatible condition_variable classes only if actually
+//  compiling for XP. The XP-compatible classes are slower than the newer
+//  versions, and depend on features not compatible with Windows Phone 8.
+#if (WINVER < _WIN32_WINNT_VISTA)
 class condition_variable_any
 {
 protected:
@@ -231,6 +235,7 @@ public:
         return base::wait_until(lock, abs_time, pred);
     }
 };
+#endif  //  Compiling for XP
 } //  Namespace mingw_stdthread::xp
 
 #if (WINVER >= _WIN32_WINNT_VISTA)
@@ -373,12 +378,15 @@ protected:
     typedef condition_variable base;
     typedef windows7::shared_mutex native_shared_mutex;
 
-    mutex internal_mutex_;
+//    When available, the SRW-based mutexes should be faster than the
+//  CriticalSection-based mutexes. Only try_lock will be unavailable in Vista,
+//  and try_lock is not used by condition_variable_any.
+    windows7::mutex internal_mutex_;
 
     template<class L>
     bool wait_impl (L & lock, DWORD time)
     {
-        unique_lock<mutex> internal_lock(internal_mutex_);
+        unique_lock<decltype(internal_mutex_)> internal_lock(internal_mutex_);
         lock.unlock();
         bool success = base::wait_impl(internal_lock, time);
         lock.lock();

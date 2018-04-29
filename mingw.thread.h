@@ -263,7 +263,7 @@ public:
     static unsigned int _hardware_concurrency_helper() noexcept
     {
         SYSTEM_INFO sysinfo;
-        ::GetSystemInfo(&sysinfo);
+        ::GetNativeSystemInfo(&sysinfo);
         return sysinfo.dwNumberOfProcessors;
     }
 
