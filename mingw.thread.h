@@ -20,6 +20,13 @@
 #ifndef WIN32STDTHREAD_H
 #define WIN32STDTHREAD_H
 
+#if !defined(__cplusplus) || (__cplusplus < 201103L)
+#error A C++11 compiler is required!
+#endif
+
+//  Use the standard classes for std::, if available.
+#include <thread>
+
 #include <windows.h>
 #include <functional>
 #include <memory>
@@ -29,26 +36,97 @@
 #include <ostream>
 #include <process.h>
 #include <ostream>
-
-#ifdef _GLIBCXX_HAS_GTHREADS
-#error This version of MinGW seems to include a win32 port of pthreads, and probably    \
-    already has C++11 std threading classes implemented, based on pthreads.             \
-    It is likely that you will get class redefinition errors below, and unfortunately   \
-    this implementation can not be used standalone                                      \
-    and independent of the system <mutex> header, since it relies on it for             \
-    std::unique_lock and other utility classes. If you would still like to use this     \
-    implementation (as it is more lightweight), you have to edit the                    \
-    c++-config.h system header of your MinGW to not define _GLIBCXX_HAS_GTHREADS.       \
-    This will prevent system headers from defining actual threading classes while still \
-    defining the necessary utility classes.
-#endif
+#include <type_traits>
 
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
 #define _STD_THREAD_INVALID_HANDLE 0
-namespace std
+namespace mingw_stdthread
 {
 namespace detail
 {
+//  For compatibility, implement std::invoke for C++11 and C++14
+#if __cplusplus < 201703L
+  template<bool PMemFunc, bool PMemData>
+  struct Invoker
+  {
+    template<class F, class... Args>
+    inline static typename std::result_of<F(Args...)>::type invoke (F&& f, Args&&... args)
+    {
+      return std::forward<F>(f)(std::forward<Args>(args)...);
+    }
+  };
+  template<bool>
+  struct InvokerHelper;
+
+  template<>
+  struct InvokerHelper<false>
+  {
+    template<class T1>
+    inline static auto get (T1&& t1) -> decltype(*std::forward<T1>(t1))
+    {
+      return *std::forward<T1>(t1);
+    }
+
+    template<class T1>
+    inline static auto get (const std::reference_wrapper<T1>& t1) -> decltype(t1.get())
+    {
+      return t1.get();
+    }
+  };
+
+  template<>
+  struct InvokerHelper<true>
+  {
+    template<class T1>
+    inline static auto get (T1&& t1) -> decltype(std::forward<T1>(t1))
+    {
+      return std::forward<T1>(t1);
+    }
+  };
+
+  template<>
+  struct Invoker<true, false>
+  {
+    template<class T, class F, class T1, class... Args>
+    inline static auto invoke (F T::* f, T1&& t1, Args&&... args) ->\
+      decltype((InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(std::forward<T1>(t1)).*f)(std::forward<Args>(args)...))
+    {
+      return (InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(std::forward<T1>(t1)).*f)(std::forward<Args>(args)...);
+    }
+  };
+
+  template<>
+  struct Invoker<false, true>
+  {
+    template<class T, class F, class T1, class... Args>
+    inline static auto invoke (F T::* f, T1&& t1, Args&&... args) ->\
+      decltype(InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(t1).*f)
+    {
+      return InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(t1).*f;
+    }
+  };
+
+  template<class F, class... Args>
+  struct InvokeResult
+  {
+    typedef Invoker<std::is_member_function_pointer<typename std::remove_reference<F>::type>::value,
+                    std::is_member_object_pointer<typename std::remove_reference<F>::type>::value &&
+                    (sizeof...(Args) == 1)> invoker;
+    inline static auto invoke (F&& f, Args&&... args) -> decltype(invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...))
+    {
+      return invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+    };
+  };
+
+  template<class F, class...Args>
+  auto invoke (F&& f, Args&&... args) -> decltype(InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...))
+  {
+    return InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+  }
+#else
+    using std::invoke;
+#endif
+
     template<int...>
     struct IntSeq {};
 
@@ -63,14 +141,14 @@ namespace detail
     struct ThreadFuncCall
     {
       typedef std::tuple<Args...> Tuple;
-      Tuple mArgs;
       Func mFunc;
+      Tuple mArgs;
       ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
       :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
       template <int... S>
       void callFunc(detail::IntSeq<S...>)
       {
-          mFunc(std::get<S>(std::forward<Tuple>(mArgs)) ...);
+          detail::invoke(std::forward<Func>(mFunc), std::get<S>(std::forward<Tuple>(mArgs)) ...);
       }
     };
 
@@ -84,7 +162,7 @@ public:
         DWORD mId;
         void clear() {mId = 0;}
         friend class thread;
-        friend class hash<id>;
+        friend class std::hash<id>;
     public:
         explicit id(DWORD aId=0) noexcept : mId(aId){}
         friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
@@ -115,7 +193,7 @@ public:
     typedef HANDLE native_handle_type;
     id get_id() const noexcept {return mThreadId;}
     native_handle_type native_handle() const {return mHandle;}
-    thread(): mHandle(_STD_THREAD_INVALID_HANDLE){}
+    thread(): mHandle(_STD_THREAD_INVALID_HANDLE), mThreadId(){}
 
     thread(thread&& other)
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
@@ -127,7 +205,7 @@ public:
     thread(const thread &other)=delete;
 
     template<class Func, typename... Args>
-    explicit thread(Func&& func, Args&&... args)
+    explicit thread(Func&& func, Args&&... args) : mHandle(), mThreadId()
     {
         typedef detail::ThreadFuncCall<Func, Args...> Call;
         auto call = new Call(
@@ -185,7 +263,7 @@ public:
     static unsigned int _hardware_concurrency_helper() noexcept
     {
         SYSTEM_INFO sysinfo;
-        ::GetSystemInfo(&sysinfo);
+        ::GetNativeSystemInfo(&sysinfo);
         return sysinfo.dwNumberOfProcessors;
     }
 
@@ -223,18 +301,44 @@ namespace this_thread
         sleep_for(sleep_time-Clock::now());
     }
 }
+} //  Namespace mingw_stdthread
 
-//  Specialization of templates is allowed in namespace std.
-template<>
-struct hash<thread::id>
+namespace std
 {
-    typedef thread::id argument_type;
+//    Because of quirks of the compiler, the common "using namespace std;"
+//  directive would flatten the namespaces and introduce ambiguity where there
+//  was none. Direct specification (std::), however, would be unaffected.
+//    Take the safe option, and include only in the presence of MinGW's win32
+//  implementation.
+#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+using mingw_stdthread::thread;
+//    Remove ambiguity immediately, to avoid problems arising from the above.
+//using std::thread;
+namespace this_thread
+{
+using namespace mingw_stdthread::this_thread;
+}
+#elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
+#define MINGW_STDTHREAD_REDUNDANCY_WARNING
+#pragma message "This version of MinGW seems to include a win32 port of\
+ pthreads, and probably already has C++11 std threading classes implemented,\
+ based on pthreads. These classes, found in namespace std, are not overridden\
+ by the mingw-std-thread library. If you would still like to use this\
+ implementation (as it is more lightweight), use the classes provided in\
+ namespace mingw_stdthread."
+#endif
+
+//    Specialize hash for this implementation's thread::id, even if the
+//  std::thread::id already has a hash.
+template<>
+struct hash<mingw_stdthread::thread::id>
+{
+    typedef mingw_stdthread::thread::id argument_type;
     typedef size_t result_type;
     size_t operator() (const argument_type & i) const noexcept
     {
         return i.mId;
     }
 };
-
 }
 #endif // WIN32STDTHREAD_H
