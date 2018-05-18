@@ -181,63 +181,44 @@ public:
 //  I define the class without try_* functions in that case.
 //    Only fully-featured implementations will be placed into namespace std.
 #if defined(_WIN32) && (WINVER >= _WIN32_WINNT_VISTA)
+namespace vista
+{
+class condition_variable_any;
+}
+
 namespace windows7
 {
-class shared_mutex
+//  We already #include "mingw.mutex.h". May as well reduce redundancy.
+class shared_mutex : windows7::mutex
 {
-    SRWLOCK mHandle;
+//    Allow condition_variable_any (and only condition_variable_any) to treat a
+//  shared_mutex as its base class.
+    friend class vista::condition_variable_any;
 public:
-    typedef PSRWLOCK native_handle_type;
-
-    shared_mutex ()
-        : mHandle(SRWLOCK_INIT)
-    {
-    }
-
-    ~shared_mutex () = default;
-
-//  No form of copying or moving should be allowed.
-    shared_mutex (const shared_mutex&) = delete;
-    shared_mutex & operator= (const shared_mutex&) = delete;
-
-//  Behavior is undefined if a lock was previously acquired by this thread.
-    void lock (void)
-    {
-        AcquireSRWLockExclusive(&mHandle);
-    }
+    using windows7::mutex::native_handle_type;
+    using windows7::mutex::lock;
+    using windows7::mutex::unlock;
+    using windows7::mutex::native_handle;
 
     void lock_shared (void)
     {
-        AcquireSRWLockShared(&mHandle);
+        AcquireSRWLockShared(native_handle());
     }
 
     void unlock_shared (void)
     {
-        ReleaseSRWLockShared(&mHandle);
-    }
-
-    void unlock (void)
-    {
-        ReleaseSRWLockExclusive(&mHandle);
+        ReleaseSRWLockShared(native_handle());
     }
 
 //  TryAcquireSRW functions are a Windows 7 feature.
 #if (WINVER >= _WIN32_WINNT_WIN7)
     bool try_lock_shared (void)
     {
-        return TryAcquireSRWLockShared(&mHandle) != 0;
+        return TryAcquireSRWLockShared(native_handle()) != 0;
     }
 
-    bool try_lock (void)
-    {
-        return TryAcquireSRWLockExclusive(&mHandle) != 0;
-    }
+    using windows7::mutex::try_lock;
 #endif
-
-    native_handle_type native_handle (void)
-    {
-        return &mHandle;
-    }
 };
 
 } //  Namespace windows7

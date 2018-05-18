@@ -278,14 +278,19 @@ use native Win32 critical section objects.");
         return success;
     }
 
-    bool wait_impl (unique_lock<windows7::mutex> & lock, DWORD time)
+    bool wait_unique (windows7::mutex * pmutex, DWORD time)
     {
-        windows7::mutex * pmutex = lock.release();
         before_wait(pmutex);
         BOOL success = SleepConditionVariableSRW( native_handle(),
                                                   pmutex->native_handle(),
                                                   time, 0);
         after_wait(pmutex);
+        return success;
+    }
+    bool wait_impl (unique_lock<windows7::mutex> & lock, DWORD time)
+    {
+        windows7::mutex * pmutex = lock.release();
+        bool success = wait_unique(pmutex, time);
         lock = unique_lock<windows7::mutex>(*pmutex, adopt_lock);
         return success;
     }
@@ -409,8 +414,7 @@ to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
     bool wait_impl (unique_lock<native_shared_mutex> & lock, DWORD time)
     {
         native_shared_mutex * pmutex = lock.release();
-        BOOL success = SleepConditionVariableSRW( base::native_handle(),
-                       pmutex->native_handle(), time, 0);
+        bool success = wait_unique(pmutex, time);
         lock = unique_lock<native_shared_mutex>(*pmutex, adopt_lock);
         return success;
     }
