@@ -3,7 +3,7 @@
 #include "../mingw.condition_variable.h"
 #include "../mingw.shared_mutex.h"
 #include <atomic>
-#include <assert.h>
+#include <cassert>
 #include <string>
 #include <iostream>
 #include <windows.h>

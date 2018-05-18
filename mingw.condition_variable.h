@@ -28,7 +28,7 @@
 #include <condition_variable>
 
 #include <atomic>
-#include <assert.h>
+#include <cassert>
 #include <chrono>
 #include <system_error>
 #include <windows.h>
@@ -103,7 +103,10 @@ protected:
 //The notify_all() must handle this grafecully
 //
         else
-            throw std::system_error(EPROTO, std::generic_category());
+        {
+            using namespace std;
+            throw system_error(make_error_code(errc::protocol_error));
+        }
     }
 public:
     template <class M>
@@ -407,7 +410,7 @@ protected:
 //  until Windows 7 that a full implementation is natively possible. The class
 //  itself is defined, with missing features, at the Vista feature level.
     static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0, "The flag \
-CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The flag for \
+CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The value for \
 exclusive mode is unknown (not specified by Microsoft Dev Center), but assumed \
 to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
 //#if (WINVER >= _WIN32_WINNT_VISTA)

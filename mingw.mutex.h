@@ -37,18 +37,10 @@
 #include <cstdio>
 #include <atomic>
 #include <mutex> //need for call_once()
-#include <assert.h>
+#include <cassert>
 
 //  Need for yield in spinlock and the implementation of invoke
 #include "mingw.thread.h"
-
-
-#ifndef EPROTO
-    #define EPROTO 134
-#endif
-#ifndef EOWNERDEAD
-    #define EOWNERDEAD 133
-#endif
 
 namespace mingw_stdthread
 {
@@ -110,15 +102,19 @@ struct _OwnerThread
 //  be atomic to prevent a torn read from spuriously causing errors.
     std::atomic<DWORD> mOwnerThread;
     constexpr _OwnerThread () noexcept : mOwnerThread(0) {}
+    static void on_deadlock (void)
+    {
+        using namespace std;
+        fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex\
+ detected. Throwing system exception\n");
+        fflush(stderr);
+        throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+    }
     DWORD checkOwnerBeforeLock() const
     {
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread.load(std::memory_order_relaxed) == self)
-        {
-            std::fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex detected. Throwing system exception\n");
-            std::fflush(stderr);
-            throw std::system_error(EDEADLK, std::generic_category());
-        }
+            on_deadlock();
         return self;
     }
     void setOwnerAfterLock(DWORD id)
@@ -129,11 +125,7 @@ struct _OwnerThread
     {
         DWORD self = GetCurrentThreadId();
         if (mOwnerThread.load(std::memory_order_relaxed) != self)
-        {
-            std::fprintf(stderr, "FATAL: Recursive unlocking of non-recursive mutex detected. Throwing system exception\n");
-            std::fflush(stderr);
-            throw std::system_error(EDEADLK, std::generic_category());
-        }
+            on_deadlock();
         mOwnerThread.store(0, std::memory_order_relaxed);
     }
 };
@@ -361,33 +353,38 @@ public:
         DWORD ret = WaitForSingleObject(mHandle, INFINITE);
         if (ret != WAIT_OBJECT_0)
         {
+            using namespace std;
             if (ret == WAIT_ABANDONED)
-                throw std::system_error(EOWNERDEAD, std::generic_category());
+                throw system_error(make_error_code(errc::owner_dead));
             else
-                throw std::system_error(EPROTO, std::generic_category());
+                throw system_error(make_error_code(errc::protocol_error));
         }
     }
     void unlock()
     {
+        using namespace std;
         if (!ReleaseMutex(mHandle))
-            throw std::system_error(EDEADLK, std::generic_category());
+            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
     }
     bool try_lock()
     {
+        using namespace std;
         DWORD ret = WaitForSingleObject(mHandle, 0);
         if (ret == WAIT_TIMEOUT)
             return false;
         else if (ret == WAIT_OBJECT_0)
             return true;
         else if (ret == WAIT_ABANDONED)
-            throw std::system_error(EOWNERDEAD, std::generic_category());
+            throw system_error(make_error_code(errc::owner_dead));
         else
-            throw std::system_error(EPROTO, std::generic_category());
+            throw system_error(make_error_code(errc::protocol_error));
     }
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
-        DWORD timeout = (DWORD)std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+        using namespace std;
+        using namespace std::chrono;
+        DWORD timeout = (DWORD)duration_cast<milliseconds>(dur).count();
 
         DWORD ret = WaitForSingleObject(mHandle, timeout);
         if (ret == WAIT_TIMEOUT)
@@ -395,9 +392,9 @@ public:
         else if (ret == WAIT_OBJECT_0)
             return true;
         else if (ret == WAIT_ABANDONED)
-            throw std::system_error(EOWNERDEAD, std::generic_category());
+            throw system_error(make_error_code(errc::owner_dead));
         else
-            throw std::system_error(EPROTO, std::generic_category());
+            throw system_error(make_error_code(errc::protocol_error));
     }
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)

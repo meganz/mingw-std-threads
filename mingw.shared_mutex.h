@@ -31,7 +31,7 @@
 #error A C++11 compiler is required!
 #endif
 
-#include <assert.h>
+#include <cassert>
 
 //    Use MinGW's shared_lock class template, if it's available. Requires C++14.
 //  If unavailable (eg. because this library is being used in C++11), then an
