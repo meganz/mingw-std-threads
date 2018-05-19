@@ -69,11 +69,19 @@ class shared_mutex
     typedef uint_fast16_t counter_type;
     std::atomic<counter_type> mCounter;
     static constexpr counter_type kWriteBit = 1 << (sizeof(counter_type) * CHAR_BIT - 1);
+
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+//  Runtime checker for verifying owner threads. Note: Exclusive mode only.
+    _OwnerThread mOwnerThread;
+#endif
 public:
     typedef shared_mutex * native_handle_type;
 
     shared_mutex ()
         : mCounter(0)
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        , mOwnerThread()
+#endif
     {
     }
 
@@ -134,31 +142,47 @@ public:
 //  Behavior is undefined if a lock was previously acquired.
     void lock (void)
     {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+#endif
         using namespace std;
-        using namespace this_thread;
 //  Might be able to use relaxed memory order...
 //  Wait for the write-lock to be unlocked, then claim the write slot.
         counter_type current;
         while ((current = mCounter.fetch_or(kWriteBit, std::memory_order_acquire)) & kWriteBit)
-            yield();
+            this_thread::yield();
 //  Wait for readers to finish up.
         while (current != kWriteBit)
         {
-            yield();
+            this_thread::yield();
             current = mCounter.load(std::memory_order_acquire);
         }
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        mOwnerThread.setOwnerAfterLock(self);
+#endif
     }
 
     bool try_lock (void)
     {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+#endif
         counter_type expected = 0;
-        return mCounter.compare_exchange_strong(expected, kWriteBit,
-                                                std::memory_order_acquire,
-                                                std::memory_order_relaxed);
+        bool ret = mCounter.compare_exchange_strong(expected, kWriteBit,
+                                                    std::memory_order_acquire,
+                                                    std::memory_order_relaxed);
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        if (ret)
+            mOwnerThread.setOwnerAfterLock(self);
+#endif
+        return ret;
     }
 
     void unlock (void)
     {
+#ifndef STDMUTEX_NO_RECURSION_CHECKS
+        mOwnerThread.checkSetOwnerBeforeUnlock();
+#endif
         using namespace std;
 #ifndef NDEBUG
         if (mCounter.load(memory_order_relaxed) != kWriteBit)
