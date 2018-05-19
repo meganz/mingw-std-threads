@@ -259,7 +259,7 @@ protected:
     template<typename MTX>
     inline static void after_wait (MTX * pmutex)
     {
-        pmutex->mOwnerThread.setOwnerAfterLock(GetCurrentThreadId());
+        pmutex->mOwnerThread.setOwnerAfterLock();
     }
 #else
     inline static void before_wait (void *) { }

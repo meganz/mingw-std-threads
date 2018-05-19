@@ -143,7 +143,7 @@ public:
     void lock (void)
     {
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+        mOwnerThread.checkOwnerBeforeLock();
 #endif
         using namespace std;
 //  Might be able to use relaxed memory order...
@@ -158,14 +158,14 @@ public:
             current = mCounter.load(std::memory_order_acquire);
         }
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.setOwnerAfterLock(self);
+        mOwnerThread.setOwnerAfterLock();
 #endif
     }
 
     bool try_lock (void)
     {
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        DWORD self = mOwnerThread.checkOwnerBeforeLock();
+        mOwnerThread.checkOwnerBeforeLock();
 #endif
         counter_type expected = 0;
         bool ret = mCounter.compare_exchange_strong(expected, kWriteBit,
@@ -173,7 +173,7 @@ public:
                                                     std::memory_order_relaxed);
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
-            mOwnerThread.setOwnerAfterLock(self);
+            mOwnerThread.setOwnerAfterLock();
 #endif
         return ret;
     }
@@ -253,7 +253,7 @@ using windows7::shared_mutex;
 using portable::shared_mutex;
 #endif
 
-class shared_timed_mutex : protected shared_mutex
+class shared_timed_mutex : shared_mutex
 {
     typedef shared_mutex Base;
 public:
