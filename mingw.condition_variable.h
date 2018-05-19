@@ -28,7 +28,7 @@
 #include <condition_variable>
 
 #include <atomic>
-#include <assert.h>
+#include <cassert>
 #include <chrono>
 #include <system_error>
 #include <windows.h>
@@ -103,7 +103,10 @@ protected:
 //The notify_all() must handle this grafecully
 //
         else
-            throw std::system_error(EPROTO, std::generic_category());
+        {
+            using namespace std;
+            throw system_error(make_error_code(errc::protocol_error));
+        }
     }
 public:
     template <class M>
@@ -256,7 +259,7 @@ protected:
     template<typename MTX>
     inline static void after_wait (MTX * pmutex)
     {
-        pmutex->mOwnerThread.setOwnerAfterLock(GetCurrentThreadId());
+        pmutex->mOwnerThread.setOwnerAfterLock();
     }
 #else
     inline static void before_wait (void *) { }
@@ -278,14 +281,19 @@ use native Win32 critical section objects.");
         return success;
     }
 
-    bool wait_impl (unique_lock<windows7::mutex> & lock, DWORD time)
+    bool wait_unique (windows7::mutex * pmutex, DWORD time)
     {
-        windows7::mutex * pmutex = lock.release();
         before_wait(pmutex);
         BOOL success = SleepConditionVariableSRW( native_handle(),
                                                   pmutex->native_handle(),
                                                   time, 0);
         after_wait(pmutex);
+        return success;
+    }
+    bool wait_impl (unique_lock<windows7::mutex> & lock, DWORD time)
+    {
+        windows7::mutex * pmutex = lock.release();
+        bool success = wait_unique(pmutex, time);
         lock = unique_lock<windows7::mutex>(*pmutex, adopt_lock);
         return success;
     }
@@ -402,15 +410,14 @@ protected:
 //  until Windows 7 that a full implementation is natively possible. The class
 //  itself is defined, with missing features, at the Vista feature level.
     static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0, "The flag \
-CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The flag for \
+CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The value for \
 exclusive mode is unknown (not specified by Microsoft Dev Center), but assumed \
 to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
 //#if (WINVER >= _WIN32_WINNT_VISTA)
     bool wait_impl (unique_lock<native_shared_mutex> & lock, DWORD time)
     {
         native_shared_mutex * pmutex = lock.release();
-        BOOL success = SleepConditionVariableSRW( base::native_handle(),
-                       pmutex->native_handle(), time, 0);
+        bool success = wait_unique(pmutex, time);
         lock = unique_lock<native_shared_mutex>(*pmutex, adopt_lock);
         return success;
     }

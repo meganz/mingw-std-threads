@@ -216,6 +216,7 @@ public:
         {
             int errnum = errno;
             delete call;
+//  Note: Should only throw EINVAL, EAGAIN, EACCES
             throw std::system_error(errnum, std::generic_category());
         }
     }
@@ -229,12 +230,13 @@ public:
     bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
     void join()
     {
+        using namespace std;
         if (get_id() == id(GetCurrentThreadId()))
-            throw std::system_error(EDEADLK, std::generic_category());
+            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
         if (mHandle == _STD_THREAD_INVALID_HANDLE)
-            throw std::system_error(ESRCH, std::generic_category());
+            throw system_error(make_error_code(errc::no_such_process));
         if (!joinable())
-            throw std::system_error(EINVAL, std::generic_category());
+            throw system_error(make_error_code(errc::invalid_argument));
         WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
         mHandle = _STD_THREAD_INVALID_HANDLE;
@@ -276,7 +278,10 @@ public:
     void detach()
     {
         if (!joinable())
-            throw std::system_error(EINVAL, std::generic_category());
+        {
+            using namespace std;
+            throw system_error(make_error_code(errc::invalid_argument));
+        }
         if (mHandle != _STD_THREAD_INVALID_HANDLE)
         {
             CloseHandle(mHandle);
