@@ -252,7 +252,7 @@ using windows7::shared_mutex;
 using portable::shared_mutex;
 #endif
 
-class shared_timed_mutex : protected shared_mutex
+class shared_timed_mutex : shared_mutex
 {
     typedef shared_mutex Base;
 public:
