@@ -129,43 +129,6 @@ struct _OwnerThread
     }
 };
 
-/*template <class B>
-class _NonRecursive: protected B
-{
-protected:
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
-//    Allow condition variable to unlock the native handle directly.
-    friend class vista::condition_variable;
-#endif
-    typedef B base;
-    _OwnerThread mOwnerThread;
-public:
-    using typename base::native_handle_type;
-    using base::native_handle;
-    constexpr _NonRecursive() noexcept :base(), mOwnerThread() {}
-    _NonRecursive (const _NonRecursive<B>&) = delete;
-    _NonRecursive& operator= (const _NonRecursive<B>&) = delete;
-    void lock()
-    {
-        DWORD self = mOwnerThread.checkOwnerBeforeLock();
-        base::lock();
-        mOwnerThread.setOwnerAfterLock(self);
-    }
-    void unlock()
-    {
-        mOwnerThread.checkSetOwnerBeforeUnlock();
-        base::unlock();
-    }
-    bool try_lock()
-    {
-        DWORD self = mOwnerThread.checkOwnerBeforeLock();
-        bool ret = base::try_lock();
-        if (ret)
-            mOwnerThread.setOwnerAfterLock(self);
-        return ret;
-    }
-};*/
-
 //    Though the Slim Reader-Writer (SRW) locks used here are not complete until
 //  Windows 7, implementing partial functionality in Vista will simplify the
 //  interaction with condition variables.
@@ -230,12 +193,6 @@ public:
 #endif  //  Compiling for Vista
 namespace xp
 {
-/*
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
-    typedef _NonRecursive<recursive_mutex> mutex;
-#else
-    typedef recursive_mutex mutex;
-#endif*/
 class mutex
 {
     CRITICAL_SECTION mHandle;
