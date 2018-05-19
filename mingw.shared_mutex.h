@@ -180,7 +180,6 @@ public:
     void unlock (void)
     {
 #if STDMUTEX_RECURSION_CHECKS
-#error TEST!
         mOwnerThread.checkSetOwnerBeforeUnlock();
 #endif
         using namespace std;
