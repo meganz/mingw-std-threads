@@ -95,16 +95,12 @@ public:
     }
 };
 
-
-thread_local DWORD mThisThread = 0;
-
 struct _OwnerThread
 {
 //    If this is to be read before locking, then the owner-thread variable must
 //  be atomic to prevent a torn read from spuriously causing errors.
     std::atomic<DWORD> mOwnerThread;
-
-    constexpr _OwnerThread () noexcept : mOwnerThread(0) { }
+    constexpr _OwnerThread () noexcept : mOwnerThread(0) {}
     static void on_deadlock (void)
     {
         using namespace std;
@@ -113,22 +109,21 @@ struct _OwnerThread
         fflush(stderr);
         throw system_error(make_error_code(errc::resource_deadlock_would_occur));
     }
-    void checkOwnerBeforeLock() const
+    DWORD checkOwnerBeforeLock() const
     {
-        if (mThisThread == 0)
-            mThisThread = GetCurrentThreadId();
-        if (mOwnerThread.load(std::memory_order_relaxed) == mThisThread)
+        DWORD self = GetCurrentThreadId();
+        if (mOwnerThread.load(std::memory_order_relaxed) == self)
             on_deadlock();
+        return self;
     }
-    void setOwnerAfterLock()
+    void setOwnerAfterLock(DWORD id)
     {
-        mOwnerThread.store(mThisThread, std::memory_order_relaxed);
+        mOwnerThread.store(id, std::memory_order_relaxed);
     }
     void checkSetOwnerBeforeUnlock()
     {
-//        DWORD self = GetCurrentThreadId();
-        if ((mOwnerThread.load(std::memory_order_relaxed) != mThisThread) ||
-            (mThisThread == 0))
+        DWORD self = GetCurrentThreadId();
+        if (mOwnerThread.load(std::memory_order_relaxed) != self)
             on_deadlock();
         mOwnerThread.store(0, std::memory_order_relaxed);
     }
@@ -160,11 +155,11 @@ public:
     void lock (void)
     {
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.checkOwnerBeforeLock();
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         AcquireSRWLockExclusive(&mHandle);
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.setOwnerAfterLock();
+        mOwnerThread.setOwnerAfterLock(self);
 #endif
     }
     void unlock (void)
@@ -179,12 +174,12 @@ public:
     bool try_lock (void)
     {
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.checkOwnerBeforeLock();
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         BOOL ret = TryAcquireSRWLockExclusive(&mHandle);
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
-            mOwnerThread.setOwnerAfterLock();
+            mOwnerThread.setOwnerAfterLock(self);
 #endif
         return ret;
     }
@@ -237,11 +232,11 @@ public:
             }
         }
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.checkOwnerBeforeLock();
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         EnterCriticalSection(&mHandle);
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.setOwnerAfterLock();
+        mOwnerThread.setOwnerAfterLock(self);
 #endif
     }
     void unlock (void)
@@ -263,12 +258,12 @@ public:
         if (state == 1)
             return false;
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-        mOwnerThread.checkOwnerBeforeLock();
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         BOOL ret = TryEnterCriticalSection(&mHandle);
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
         if (ret)
-            mOwnerThread.setOwnerAfterLock();
+            mOwnerThread.setOwnerAfterLock(self);
 #endif
         return ret;
     }
@@ -362,9 +357,9 @@ public:
     timed_mutex& operator=(const timed_mutex&) = delete;
     void lock()
     {
-        mOwnerThread.checkOwnerBeforeLock();
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
         recursive_timed_mutex::lock();
-        mOwnerThread.setOwnerAfterLock();
+        mOwnerThread.setOwnerAfterLock(self);
     }
     void unlock()
     {
@@ -374,10 +369,10 @@ public:
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
-        mOwnerThread.checkOwnerBeforeLock();
+        DWORD self = mOwnerThread.checkOwnerBeforeLock();
         bool ret = recursive_timed_mutex::try_lock_for(dur);
         if (ret)
-            mOwnerThread.setOwnerAfterLock();
+            mOwnerThread.setOwnerAfterLock(self);
         return ret;
     }
     template <class Clock, class Duration>
