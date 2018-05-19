@@ -38,10 +38,9 @@
 //  implementation of shared_lock is provided by this header.
 #if (__cplusplus >= 201402L)
 #include <shared_mutex>
-#else
+#endif
 //  For defer_lock_t, adopt_lock_t, and try_to_lock_t
 #include "mingw.mutex.h"
-#endif
 
 //  For descriptive errors.
 #include <system_error>
