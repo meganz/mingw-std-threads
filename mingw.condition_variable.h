@@ -250,7 +250,7 @@ class condition_variable
 protected:
     CONDITION_VARIABLE cvariable_;
 
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
     template<typename MTX>
     inline static void before_wait (MTX * pmutex)
     {
