@@ -67,7 +67,6 @@ using std::try_to_lock;
 
 class recursive_mutex
 {
-protected:
     CRITICAL_SECTION mHandle;
 public:
     typedef LPCRITICAL_SECTION native_handle_type;
@@ -325,6 +324,22 @@ using xp::mutex;
 
 class recursive_timed_mutex
 {
+    bool try_lock_internal (DWORD ms)
+    {
+        DWORD ret = WaitForSingleObject(mHandle, ms);
+        using namespace std;
+        switch (ret)
+        {
+        case WAIT_TIMEOUT:
+            return false;
+        case WAIT_OBJECT_0:
+            return true;
+        case WAIT_ABANDONED:
+            throw system_error(make_error_code(errc::owner_dead));
+        default:
+            throw system_error(make_error_code(errc::protocol_error));
+        }
+    }
 protected:
     HANDLE mHandle;
 //    Track locking thread for error checking of non-recursive timed_mutex. For
@@ -350,15 +365,7 @@ public:
     }
     void lock()
     {
-        DWORD ret = WaitForSingleObject(mHandle, INFINITE);
-        if (ret != WAIT_OBJECT_0)
-        {
-            using namespace std;
-            if (ret == WAIT_ABANDONED)
-                throw system_error(make_error_code(errc::owner_dead));
-            else
-                throw system_error(make_error_code(errc::protocol_error));
-        }
+        try_lock_internal(INFINITE);
     }
     void unlock()
     {
@@ -368,33 +375,14 @@ public:
     }
     bool try_lock()
     {
-        using namespace std;
-        DWORD ret = WaitForSingleObject(mHandle, 0);
-        if (ret == WAIT_TIMEOUT)
-            return false;
-        else if (ret == WAIT_OBJECT_0)
-            return true;
-        else if (ret == WAIT_ABANDONED)
-            throw system_error(make_error_code(errc::owner_dead));
-        else
-            throw system_error(make_error_code(errc::protocol_error));
+        return try_lock_internal(0);
     }
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
-        using namespace std;
         using namespace std::chrono;
         DWORD timeout = (DWORD)duration_cast<milliseconds>(dur).count();
-
-        DWORD ret = WaitForSingleObject(mHandle, timeout);
-        if (ret == WAIT_TIMEOUT)
-            return false;
-        else if (ret == WAIT_OBJECT_0)
-            return true;
-        else if (ret == WAIT_ABANDONED)
-            throw system_error(make_error_code(errc::owner_dead));
-        else
-            throw system_error(make_error_code(errc::protocol_error));
+        return try_lock_internal(timeout);
     }
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
@@ -405,38 +393,27 @@ public:
 
 //  Override if, and only if, it is necessary for error-checking.
 #ifndef STDMUTEX_NO_RECURSION_CHECKS
-class timed_mutex: public recursive_timed_mutex
+class timed_mutex: recursive_timed_mutex
 {
-protected:
-    typedef recursive_timed_mutex base;
 public:
-    using base::base;
     timed_mutex(const timed_mutex&) = delete;
     timed_mutex& operator=(const timed_mutex&) = delete;
     void lock()
     {
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
-        base::lock();
+        recursive_timed_mutex::lock();
         mOwnerThread.setOwnerAfterLock(self);
     }
     void unlock()
     {
         mOwnerThread.checkSetOwnerBeforeUnlock();
-        base::unlock();
-    }
-    bool try_lock ()
-    {
-        DWORD self = mOwnerThread.checkOwnerBeforeLock();
-        bool ret = base::try_lock();
-        if (ret)
-            mOwnerThread.setOwnerAfterLock(self);
-        return ret;
+        recursive_timed_mutex::unlock();
     }
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
-        bool ret = base::try_lock_for(dur);
+        bool ret = recursive_timed_mutex::try_lock_for(dur);
         if (ret)
             mOwnerThread.setOwnerAfterLock(self);
         return ret;
@@ -444,11 +421,11 @@ public:
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
     {
-        DWORD self = mOwnerThread.checkOwnerBeforeLock();
-        bool ret = base::try_lock_until(timeout_time);
-        if (ret)
-            mOwnerThread.setOwnerAfterLock(self);
-        return ret;
+        return try_lock_for(timeout_time - Clock::now());
+    }
+    bool try_lock ()
+    {
+        return try_lock_for(std::chrono::milliseconds(0));
     }
 };
 #else
