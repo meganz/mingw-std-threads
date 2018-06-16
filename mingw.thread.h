@@ -38,6 +38,10 @@
 #include <ostream>
 #include <type_traits>
 
+#ifndef NDEBUG
+#include <cstdio>
+#endif
+
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
 #define _STD_THREAD_INVALID_HANDLE 0
 namespace mingw_stdthread
@@ -246,13 +250,25 @@ public:
     ~thread()
     {
         if (joinable())
+        {
+#ifndef NDEBUG
+            std::printf("Error: Must join() or detach() a thread before \
+destroying it.\n");
+#endif
             std::terminate();
+        }
     }
     thread& operator=(const thread&) = delete;
     thread& operator=(thread&& other) noexcept
     {
         if (joinable())
-          std::terminate();
+        {
+#ifndef NDEBUG
+            std::printf("Error: Must join() or detach() a thread before \
+moving another thread to it.\n");
+#endif
+            std::terminate();
+        }
         swap(std::forward<thread>(other));
         return *this;
     }

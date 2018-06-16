@@ -23,12 +23,15 @@
 #if !defined(__cplusplus) || (__cplusplus < 201103L)
 #error A C++11 compiler is required!
 #endif
-// Recursion checks on non-recursive locks have some performance penalty, so the user
-// may want to disable the checks in release builds. In that case, make sure they
-// are always enabled in debug builds.
-
-#if defined(STDMUTEX_NO_RECURSION_CHECKS) && !defined(NDEBUG)
-    #undef STDMUTEX_NO_RECURSION_CHECKS
+// Recursion checks on non-recursive locks have some performance penalty, and
+// the C++ standard does not mandate them. The user might want to explicitly
+// enable or disable such checks. If the user has no preference, enable such
+// checks in debug builds, but not in release builds.
+#ifdef STDMUTEX_RECURSION_CHECKS
+#elif defined(NDEBUG)
+#define STDMUTEX_RECURSION_CHECKS 0
+#else
+#define STDMUTEX_RECURSION_CHECKS 1
 #endif
 
 #include <windows.h>
@@ -47,7 +50,7 @@ namespace mingw_stdthread
 //    The _NonRecursive class has mechanisms that do not play nice with direct
 //  manipulation of the native handle. This forward declaration is part of
 //  a friend class declaration.
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
 namespace vista
 {
 class condition_variable;
@@ -95,6 +98,7 @@ public:
     }
 };
 
+#if STDMUTEX_RECURSION_CHECKS
 struct _OwnerThread
 {
 //    If this is to be read before locking, then the owner-thread variable must
@@ -128,6 +132,7 @@ struct _OwnerThread
         mOwnerThread.store(0, std::memory_order_relaxed);
     }
 };
+#endif
 
 //    Though the Slim Reader-Writer (SRW) locks used here are not complete until
 //  Windows 7, implementing partial functionality in Vista will simplify the
@@ -139,14 +144,14 @@ class mutex
 {
     SRWLOCK mHandle;
 //  Track locking thread for error checking.
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
     _OwnerThread mOwnerThread;
 #endif
 public:
     typedef PSRWLOCK native_handle_type;
     constexpr mutex () noexcept : mHandle(SRWLOCK_INIT)
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         , mOwnerThread()
 #endif
     { }
@@ -154,17 +159,17 @@ public:
     mutex & operator= (const mutex&) = delete;
     void lock (void)
     {
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         AcquireSRWLockExclusive(&mHandle);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.setOwnerAfterLock(self);
 #endif
     }
     void unlock (void)
     {
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.checkSetOwnerBeforeUnlock();
 #endif
         ReleaseSRWLockExclusive(&mHandle);
@@ -173,11 +178,11 @@ public:
 #if (WINVER >= _WIN32_WINNT_WIN7)
     bool try_lock (void)
     {
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         BOOL ret = TryAcquireSRWLockExclusive(&mHandle);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         if (ret)
             mOwnerThread.setOwnerAfterLock(self);
 #endif
@@ -198,14 +203,14 @@ class mutex
     CRITICAL_SECTION mHandle;
     std::atomic_uchar mState;
 //  Track locking thread for error checking.
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
     _OwnerThread mOwnerThread;
 #endif
 public:
     typedef PCRITICAL_SECTION native_handle_type;
     constexpr mutex () noexcept : mHandle(), mState(2)
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         , mOwnerThread()
 #endif
     { }
@@ -231,18 +236,18 @@ public:
                 state = mState.load(std::memory_order_acquire);
             }
         }
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         EnterCriticalSection(&mHandle);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.setOwnerAfterLock(self);
 #endif
     }
     void unlock (void)
     {
         assert(mState.load(std::memory_order_relaxed) == 0);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.checkSetOwnerBeforeUnlock();
 #endif
         LeaveCriticalSection(&mHandle);
@@ -257,11 +262,11 @@ public:
         }
         if (state == 1)
             return false;
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         BOOL ret = TryEnterCriticalSection(&mHandle);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         if (ret)
             mOwnerThread.setOwnerAfterLock(self);
 #endif
@@ -302,7 +307,7 @@ protected:
 //    Track locking thread for error checking of non-recursive timed_mutex. For
 //  standard compliance, this must be defined in same class and at the same
 //  access-control level as every other variable in the timed_mutex.
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
     _OwnerThread mOwnerThread;
 #endif
@@ -312,7 +317,7 @@ public:
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL))
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         , mOwnerThread()
 #endif
     {}
@@ -349,7 +354,7 @@ public:
 };
 
 //  Override if, and only if, it is necessary for error-checking.
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
 class timed_mutex: recursive_timed_mutex
 {
 public:

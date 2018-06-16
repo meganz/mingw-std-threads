@@ -69,7 +69,7 @@ class shared_mutex
     std::atomic<counter_type> mCounter;
     static constexpr counter_type kWriteBit = 1 << (sizeof(counter_type) * CHAR_BIT - 1);
 
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
 //  Runtime checker for verifying owner threads. Note: Exclusive mode only.
     _OwnerThread mOwnerThread;
 #endif
@@ -78,7 +78,7 @@ public:
 
     shared_mutex ()
         : mCounter(0)
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         , mOwnerThread()
 #endif
     {
@@ -141,7 +141,7 @@ public:
 //  Behavior is undefined if a lock was previously acquired.
     void lock (void)
     {
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         using namespace std;
@@ -156,21 +156,21 @@ public:
             this_thread::yield();
             current = mCounter.load(std::memory_order_acquire);
         }
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.setOwnerAfterLock(self);
 #endif
     }
 
     bool try_lock (void)
     {
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
         counter_type expected = 0;
         bool ret = mCounter.compare_exchange_strong(expected, kWriteBit,
                                                     std::memory_order_acquire,
                                                     std::memory_order_relaxed);
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         if (ret)
             mOwnerThread.setOwnerAfterLock(self);
 #endif
@@ -179,7 +179,7 @@ public:
 
     void unlock (void)
     {
-#ifndef STDMUTEX_NO_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.checkSetOwnerBeforeUnlock();
 #endif
         using namespace std;
