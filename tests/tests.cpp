@@ -173,7 +173,7 @@ void test_future ()
     throw;
   }
   try {
-    future_exception.get();
+    test_future_get_value(future_exception);
     LOG("WARNING: %s","Got a value where there should be an exception!");
   } catch (std::exception & e) {
     LOG("\tReceived an exception (\"%s\") as expected.", e.what());
@@ -181,14 +181,14 @@ void test_future ()
 
   LOG("\t%s", "Waiting for the thread to exit...");
   try {
-    future_late.get();
+    test_future_get_value(future_late);
     LOG("WARNING: %s","Got a value where there should be an exception!");
   } catch (std::exception & e) {
     LOG("\tReceived an exception (\"%s\") as expected.", e.what());
   }
 
   try {
-    future_broken.get();
+    test_future_get_value(future_broken);
     LOG("WARNING: %s","Got a value where there should be an exception!");
   } catch (std::future_error & e) {
     LOG("\tReceived a future_error (\"%s\") as expected.", e.what());
@@ -350,7 +350,10 @@ int main()
       LOG("%s","Testing implementation of <future>...");
       test_future<int>();
       test_future<void>();
-      test_future<int&>();
+      test_future<int &>();
+      test_future<int const &>();
+      test_future<int volatile &>();
+      test_future<int const volatile &>();
       LOG("%s","Testing <future>'s use of allocators. Should allocate, then deallocate.");
       promise<int> allocated_promise (std::allocator_arg, CustomAllocator<unsigned>());
       allocated_promise.set_value(7);

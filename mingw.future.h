@@ -693,49 +693,51 @@ class promise : mingw_stdthread::detail::FutureBase
 ////////////////////////////////////////////////////////////////////////////////
 
 template<class T>
-class future<T&> : future<T*>
+class future<T&> : future<void *>
 {
+  typedef future<void *> Base;
   template<class U>
   friend class shared_future;
   template<class U>
   friend class promise;
 
-  future (typename future<T*>::state_type * state)
-    : future<T*>(state)
+  future (typename Base::state_type * state)
+    : Base(state)
   {
   }
 
  public:
-  using future<T*>::valid;
-  using future<T*>::wait_for;
-  using future<T*>::wait_until;
-  using future<T*>::wait;
+  using Base::valid;
+  using Base::wait_for;
+  using Base::wait_until;
+  using Base::wait;
 
   future (void) noexcept = default;
 
-  T& get (void) const
+  inline T& get (void) const
   {
-    return *future<T*>::get();
+    return *static_cast<T *>(Base::get());
   }
 
   shared_future<T&> share (void) noexcept;
 };
 
 template<class T>
-class shared_future<T&> : shared_future<T*>
+class shared_future<T&> : shared_future<void *>
 {
+  typedef shared_future<void *> Base;
  public:
-  using shared_future<T*>::wait;
-  using shared_future<T*>::wait_for;
-  using shared_future<T*>::wait_until;
-  using shared_future<T*>::valid;
+  using Base::wait;
+  using Base::wait_for;
+  using Base::wait_until;
+  using Base::valid;
 
-  T& get (void) const
+  inline T& get (void) const
   {
-    return *shared_future<T*>::get();
+    return *static_cast<T *>(Base::get());
   }
 
-  shared_future (void) noexcept = default;
+  /*shared_future (void) noexcept = default;
 
   shared_future (shared_future<T&> && source) noexcept = default;
 
@@ -743,16 +745,16 @@ class shared_future<T&> : shared_future<T*>
 
   shared_future (shared_future<T&> const & source) noexcept(__cplusplus >= 201703L) = default;
 
-  shared_future<T&> & operator= (shared_future<T&> const & source) noexcept(__cplusplus >= 201703L) = default;
+  shared_future<T&> & operator= (shared_future<T&> const & source) noexcept(__cplusplus >= 201703L) = default;*/
 
   shared_future (future<T&> && source) noexcept
-    : shared_future<T*>(std::move(source))
+    : Base(std::move(source))
   {
   }
 
   shared_future<T&> & operator= (future<T&> && source) noexcept
   {
-    shared_future<T*>::operator=(std::move(source));
+    Base::operator=(std::move(source));
     return *this;
   }
 
@@ -767,37 +769,40 @@ shared_future<T&> future<T&>::share (void) noexcept
 }
 
 template<class T>
-class promise<T&> : private promise<T*>
+class promise<T&> : private promise<void *>
 {
+  typedef promise<void *> Base;
  public:
-  using promise<T*>::set_exception;
-  using promise<T*>::set_exception_at_thread_exit;
+  using Base::set_exception;
+  using Base::set_exception_at_thread_exit;
 
   promise (void) = default;
   template<typename Alloc>
   promise (std::allocator_arg_t arg, Alloc const & alloc)
-    : promise<T*>(arg, alloc)
+    : Base(arg, alloc)
   {
   }
 
   inline void set_value (T & value)
   {
-    promise<T*>::set_value(&value);
+    typedef typename std::remove_cv<T>::type T_non_cv;
+    Base::set_value(const_cast<T_non_cv *>(&value));
   }
 
   inline void set_value_at_thread_exit (T & value)
   {
-    promise<T*>::set_value_at_thread_exit(&value);
+    typedef typename std::remove_cv<T>::type T_non_cv;
+    Base::set_value_at_thread_exit(const_cast<T_non_cv *>(&value));
   }
 
   inline future<T&> get_future (void)
   {
-    return promise<T*>::template make_future<T&>();
+    return Base::template make_future<T&>();
   }
 
   void swap (promise<T&> & other) noexcept
   {
-    promise<T*>::swap(other);
+    Base::swap(other);
   }
 };
 
