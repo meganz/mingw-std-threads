@@ -24,6 +24,8 @@
 #include <cassert>
 #include <vector>
 #include <utility>  //  For std::pair
+#include <type_traits>
+#include <memory>
 #include "mingw.thread.h"
 #include "mingw.mutex.h"
 #include "mingw.condition_variable.h"
@@ -786,13 +788,13 @@ class promise<T&> : private promise<void *>
   inline void set_value (T & value)
   {
     typedef typename std::remove_cv<T>::type T_non_cv;
-    Base::set_value(const_cast<T_non_cv *>(&value));
+    Base::set_value(const_cast<T_non_cv *>(std::addressof(value)));
   }
 
   inline void set_value_at_thread_exit (T & value)
   {
     typedef typename std::remove_cv<T>::type T_non_cv;
-    Base::set_value_at_thread_exit(const_cast<T_non_cv *>(&value));
+    Base::set_value_at_thread_exit(const_cast<T_non_cv *>(std::addressof(value)));
   }
 
   inline future<T&> get_future (void)
@@ -934,24 +936,6 @@ struct uses_allocator<promise<T>, Alloc> : std::true_type
 {
 };
 
-/*}
-namespace mingw_stdthread
-{
-namespace detail
-{
-template<typename T>
-void invoke_and_store(std::promise<T>
-  try {
-    prom2.set_value(mingw_stdthread::detail::invoke(f2, args2...));
-  } catch (...)
-  {
-    prom2.set_exception(std::current_exception());
-  }
-}
-}
-namespace std
-{*/
-
 
 //    Unfortunately, MinGW's <future> locks us into a particular (non-standard)
 //  signature for async.
@@ -987,32 +971,37 @@ std::future<std::invoke_result_t<std::decay_t<Function>, std::decay_t<Args>...> 
 std::future<__async_result_of<Function, Args...> >
   async(std::launch policy, Function&& f, Args&&... args)
 {
-#if (__cplusplus < 201703L)
-  //typedef std::result_of<std::decay<Function>::type(std::decay<Args>::type...)>::type result_type;
   typedef __async_result_of<Function, Args...> result_type;
+/*#if (__cplusplus < 201703L)
+  typedef std::result_of<std::decay<Function>::type(std::decay<Args>::type...)>::type result_type;
 #else
   typedef std::invoke_result_t<std::decay_t<Function>, std::decay_t<Args>...> result_type;
-#endif
+#endif*/
   typedef future<result_type> future_type;
   typedef typename future_type::state_type state_type;
-  if ((policy & std::launch::async) == std::launch::async)
+
+  //auto setter = []
+
+  state_type * state_ptr;
+  /*if ((policy & std::launch::async) == std::launch::async)
+    state_ptr = new state_type ();
+  else*/
+    state_ptr = new state_type (std::function<result_type(void)>(std::bind(std::forward<Function>(f), std::forward<Args>(args)...)));
+
+  future<result_type> result { state_ptr };
+
+
+  /*if ((policy & std::launch::async) == std::launch::async)
   {
-    promise<result_type> prom;
-    future<result_type> fut = prom.get_future();
-    mingw_stdthread::thread t ([](promise<result_type> prom2, typename std::decay<Function>::type f2, typename std::decay<Args>::type... args2)
+    state_ptr->increment_references();
+    mingw_stdthread::thread t ([](state_type * ptr, typename std::decay<Function>::type f2, typename std::decay<Args>::type... args2)
       {
-        try {
-          prom2.set_value(mingw_stdthread::detail::invoke(f2, args2...));
-        } catch (...)
-        {
-          prom2.set_exception(std::current_exception());
-        }
-      }, std::move(prom), std::forward<Function>(f), std::forward<Args>(args)...);
+//        mingw_stdthread::detail::StoreHelper<result_type, promise<result_type> >
+        ptr->decrement_references();
+      }, state_ptr, std::forward<Function>(f), std::forward<Args>(args)...);
     t.detach();
-    return fut;
-  }
-  else
-    return future<result_type>(new state_type(std::function<result_type(void)>(std::bind(std::forward<Function>(f), std::forward<Args>(args)...))));
+  }*/
+  return result;
 }
 
 #if (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
