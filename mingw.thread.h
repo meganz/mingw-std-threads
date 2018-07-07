@@ -43,7 +43,6 @@
 #endif
 
 //instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
-#define _STD_THREAD_INVALID_HANDLE 0
 namespace mingw_stdthread
 {
 namespace detail
@@ -142,18 +141,25 @@ namespace detail
 
     // We can't define the Call struct in the function - the standard forbids template methods in that case
     template<class Func, typename... Args>
-    struct ThreadFuncCall
+    class ThreadFuncCall
     {
-      typedef std::tuple<Args...> Tuple;
-      Func mFunc;
-      Tuple mArgs;
-      ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
-      :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
-      template <int... S>
-      void callFunc(detail::IntSeq<S...>)
-      {
-          detail::invoke(std::forward<Func>(mFunc), std::get<S>(std::forward<Tuple>(mArgs)) ...);
-      }
+        typedef std::tuple<Args...> Tuple;
+        Func mFunc;
+        Tuple mArgs;
+
+        template <int... S>
+        void callFunc(detail::IntSeq<S...>)
+        {
+            detail::invoke(std::forward<Func>(mFunc), std::get<S>(std::forward<Tuple>(mArgs)) ...);
+        }
+    public:
+        ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
+        :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
+
+        void callFunc()
+        {
+            callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
+        }
     };
 
 }
@@ -190,19 +196,35 @@ public:
             }
         }
     };
-protected:
+private:
+    static constexpr HANDLE kInvalidHandle = nullptr;
     HANDLE mHandle;
     id mThreadId;
+
+    template <class Call>
+    static unsigned __stdcall threadfunc(void* arg)
+    {
+        std::unique_ptr<Call> call(static_cast<Call*>(arg));
+        call->callFunc();
+        return 0;
+    }
+
+    static unsigned int _hardware_concurrency_helper() noexcept
+    {
+        SYSTEM_INFO sysinfo;
+        ::GetNativeSystemInfo(&sysinfo);
+        return sysinfo.dwNumberOfProcessors;
+    }
 public:
     typedef HANDLE native_handle_type;
     id get_id() const noexcept {return mThreadId;}
     native_handle_type native_handle() const {return mHandle;}
-    thread(): mHandle(_STD_THREAD_INVALID_HANDLE), mThreadId(){}
+    thread(): mHandle(kInvalidHandle), mThreadId(){}
 
     thread(thread&& other)
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
     {
-        other.mHandle = _STD_THREAD_INVALID_HANDLE;
+        other.mHandle = kInvalidHandle;
         other.mThreadId.clear();
     }
 
@@ -214,36 +236,35 @@ public:
         typedef detail::ThreadFuncCall<Func, Args...> Call;
         auto call = new Call(
             std::forward<Func>(func), std::forward<Args>(args)...);
-        mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call, Args...>,
-            (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));
-        if (mHandle == _STD_THREAD_INVALID_HANDLE)
+        auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
+            static_cast<LPVOID>(call), 0,
+            reinterpret_cast<unsigned*>(&(mThreadId.mId)));
+        /*mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
+            (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));*/
+        if (int_handle == 0)
         {
+            mHandle = kInvalidHandle;
             int errnum = errno;
             delete call;
 //  Note: Should only throw EINVAL, EAGAIN, EACCES
             throw std::system_error(errnum, std::generic_category());
-        }
+        } else
+            mHandle = reinterpret_cast<HANDLE>(int_handle);
     }
-    template <class Call, typename... Args>
-    static unsigned __stdcall threadfunc(void* arg)
-    {
-        std::unique_ptr<Call> call(static_cast<Call*>(arg));
-        call->callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
-        return 0;
-    }
-    bool joinable() const {return mHandle != _STD_THREAD_INVALID_HANDLE;}
+
+    bool joinable() const {return mHandle != kInvalidHandle;}
     void join()
     {
         using namespace std;
         if (get_id() == id(GetCurrentThreadId()))
             throw system_error(make_error_code(errc::resource_deadlock_would_occur));
-        if (mHandle == _STD_THREAD_INVALID_HANDLE)
+        if (mHandle == kInvalidHandle)
             throw system_error(make_error_code(errc::no_such_process));
         if (!joinable())
             throw system_error(make_error_code(errc::invalid_argument));
         WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
-        mHandle = _STD_THREAD_INVALID_HANDLE;
+        mHandle = kInvalidHandle;
         mThreadId.clear();
     }
 
@@ -278,13 +299,6 @@ moving another thread to it.\n");
         std::swap(mThreadId.mId, other.mThreadId.mId);
     }
 
-    static unsigned int _hardware_concurrency_helper() noexcept
-    {
-        SYSTEM_INFO sysinfo;
-        ::GetNativeSystemInfo(&sysinfo);
-        return sysinfo.dwNumberOfProcessors;
-    }
-
     static unsigned int hardware_concurrency() noexcept
     {
         static unsigned int cached = _hardware_concurrency_helper();
@@ -298,10 +312,10 @@ moving another thread to it.\n");
             using namespace std;
             throw system_error(make_error_code(errc::invalid_argument));
         }
-        if (mHandle != _STD_THREAD_INVALID_HANDLE)
+        if (mHandle != kInvalidHandle)
         {
             CloseHandle(mHandle);
-            mHandle = _STD_THREAD_INVALID_HANDLE;
+            mHandle = kInvalidHandle;
         }
         mThreadId.clear();
     }
