@@ -150,11 +150,14 @@ class mutex
 #endif
 public:
     typedef PSRWLOCK native_handle_type;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
     constexpr mutex () noexcept : mHandle(SRWLOCK_INIT)
 #if STDMUTEX_RECURSION_CHECKS
         , mOwnerThread()
 #endif
     { }
+#pragma GCC diagnostic pop
     mutex (const mutex&) = delete;
     mutex & operator= (const mutex&) = delete;
     void lock (void)
