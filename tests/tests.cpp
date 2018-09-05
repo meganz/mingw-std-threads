@@ -40,7 +40,6 @@ struct TestMove
     }
 };
 
-
 template<class T>
 void test_future_set_value (promise<T> & promise)
 {
@@ -100,7 +99,7 @@ struct CustomAllocator
 template<class T>
 void test_future ()
 {
-  static_assert(is_move_constructible<promise<T> >::value,
+  /*static_assert(is_move_constructible<promise<T> >::value,
                 "std::promise must be move-constructible.");
   static_assert(is_move_assignable<promise<T> >::value,
                 "std::promise must be move-assignable.");
@@ -192,32 +191,39 @@ void test_future ()
     LOG("WARNING: %s","Got a value where there should be an exception!");
   } catch (std::future_error & e) {
     LOG("\tReceived a future_error (\"%s\") as expected.", e.what());
-  }
+  }*/
 
-  /*LOG("\t%s", "Deferring a function...");
+  LOG("\t%s", "Deferring a function...");
   auto async_deferred = async(launch::deferred, [] (void) -> T
     {
       std::hash<std::thread::id> hasher;
       LOG("\t\tDeferred function called on thread %zu", hasher(std::this_thread::get_id()));
-      return T();
+      if (!is_void<T>::value)
+        return T(test_int);
     });
   LOG("\t%s", "Calling a function asynchronously...");
   auto async_async = async(launch::async, [] (void) -> T
     {
       std::hash<std::thread::id> hasher;
       LOG("\t\tAsynchronous function called on thread %zu", hasher(std::this_thread::get_id()));
-      return T();
+      if (!is_void<T>::value)
+        return T(test_int);
     });
   LOG("\t%s", "Letting the implementation decide...");
   auto async_either = async([] (thread::id other_id) -> T
     {
       std::hash<thread::id> hasher;
       LOG("\t\tFunction called on thread %zu. Implementation chose %s execution.", hasher(this_thread::get_id()), (this_thread::get_id() == other_id) ? "deferred" : "asynchronous");
-      return T();
+      if (!is_void<T>::value)
+        return T(test_int);
     }, this_thread::get_id());
+
+  LOG("\t%s", "Fetching asynchronous result.");
   async_async.get();
+  LOG("\t%s", "Fetching deferred result.");
   async_deferred.get();
-  async_either.get();*/
+  LOG("\t%s", "Fetching implementation-defined result.");
+  async_either.get();
 }
 
 int main()

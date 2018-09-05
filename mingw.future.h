@@ -115,10 +115,6 @@ struct FutureStateBase
 
   std::atomic<size_t> mReferences;
   std::atomic<uint_fast8_t> mType;
- /*private:
-  template<class T>
-  friend class FutureState;
-  ~FutureStateBase() noexcept = default;*/
 };
 
 //  Reduce compilation time and improve code re-use.
@@ -220,7 +216,7 @@ struct FutureState : public FutureStateBase
     struct {} mUndecided;  //  Included to make the active member unambiguous.
     T mObject;
     std::exception_ptr mException;
-    std::function<T(void)> mFunction;
+    std::function<void(void)> mFunction;
   };
 
   FutureState (void) noexcept
@@ -228,7 +224,7 @@ struct FutureState : public FutureStateBase
   {
   }
 
-  FutureState (std::function<T(void)> && deferred_function)
+  FutureState (std::function<void(void)> && deferred_function)
     : FutureStateBase(Type::kDeferred), mFunction(std::move(deferred_function))
   {
   }
@@ -238,12 +234,6 @@ struct FutureState : public FutureStateBase
     delete this;
   }
 
-/*  void set_deferred (std::function<T(void)> && func)
-  {
-    assert(type_ = 0x00);
-    new(&function_) std::function<T(void)>(std::move(func));
-    type_.store(0x01, std::memory_order_release);
-  }*/
   template<class Arg>
   void set_value (Arg && arg)
   {
@@ -316,10 +306,8 @@ struct FutureStateAllocated : public FutureState<T>
     allocator_traits::destroy(alloc, this);
     allocator_traits::deallocate(alloc, ptr, 1);
   }
- /*private:
-  ~FutureStateAllocated (void) = default;*/
 };
-}
+} //  Namespace "detail"
 
 #if (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
 }
@@ -344,8 +332,6 @@ class future : mingw_stdthread::detail::FutureBase
 
   friend class shared_future<T>;
   friend class promise<T>;
-  /*template<class Function, class ... Args>
-  friend future<__async_result_of<Function, Args...> > async (Function &&, Args&&...);*/
 
   template<class U>
   friend class future;
@@ -408,11 +394,8 @@ class future : mingw_stdthread::detail::FutureBase
       state_type * ptr = static_cast<state_type *>(mState);
       decltype(ptr->mFunction) func = std::move(ptr->mFunction);
       ptr->mFunction.~function();
-      try {
-        ptr->set_value(func());
-      } catch (...) {
-        ptr->set_exception(std::current_exception());
-      }
+      func();
+      ptr->get_condition_variable().notify_all();
     }
   }
 };
@@ -708,6 +691,8 @@ class future<T&> : future<void *>
   {
   }
 
+  template<class _Fn, class ... _Args>
+  friend future<__async_result_of<_Fn, _Args...>> async (std::launch, _Fn &&, _Args&&...);
  public:
   using Base::valid;
   using Base::wait_for;
@@ -767,7 +752,6 @@ template<class T>
 shared_future<T&> future<T&>::share (void) noexcept
 {
   return std::move(shared_future<T&>(std::move(*this)));
-  //return future<Empty>::share();
 }
 
 template<class T>
@@ -825,6 +809,9 @@ class future<void> : future<mingw_stdthread::detail::Empty>
     : future<Empty>(state)
   {
   }
+
+  template<class _Fn, class ... _Args>
+  friend future<__async_result_of<_Fn, _Args...>> async (std::launch, _Fn &&, _Args&&...);
 
  public:
   using future<Empty>::valid;
@@ -936,6 +923,84 @@ struct uses_allocator<promise<T>, Alloc> : std::true_type
 {
 };
 
+} //  Namespace "std"
+namespace mingw_stdthread
+{
+namespace detail
+{
+template<class Ret>
+struct StorageHelper
+{
+  template<class Func, class ... Args>
+  static void store_deferred (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
+  {
+    try {
+      state_ptr->set_value(std::forward<Func>(func)(std::forward<Args>(args)...));
+    } catch (...) {
+      state_ptr->set_exception(std::current_exception());
+    }
+  }
+  template<class Func, class ... Args>
+  static void store (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
+  {
+    std::unique_lock<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+    store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    lock.unlock();
+    state_ptr->get_condition_variable().notify_all();
+  }
+};
+
+template<class Ref>
+struct StorageHelper<Ref&>
+{
+  template<class Func, class ... Args>
+  static void store_deferred (FutureState<void*> * state_ptr, Func && func, Args&&... args)
+  {
+    try {
+      typedef typename std::remove_cv<Ref>::type Ref_non_cv;
+      Ref & rf = std::forward<Func>(func)(std::forward<Args>(args)...);
+      state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
+    } catch (...) {
+      state_ptr->set_exception(std::current_exception());
+    }
+  }
+  template<class Func, class ... Args>
+  static void store (FutureState<void*> * state_ptr, Func && func, Args&&... args)
+  {
+    std::unique_lock<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+    store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    lock.unlock();
+    state_ptr->get_condition_variable().notify_all();
+  }
+};
+
+template<>
+struct StorageHelper<void>
+{
+  template<class Func, class ... Args>
+  static void store_deferred (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
+  {
+    try {
+      std::forward<Func>(func)(std::forward<Args>(args)...);
+      state_ptr->set_value(Empty{});
+    } catch (...) {
+      state_ptr->set_exception(std::current_exception());
+    }
+  }
+  template<class Func, class ... Args>
+  static void store (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
+  {
+    std::unique_lock<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+    store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    lock.unlock();
+    state_ptr->get_condition_variable().notify_all();
+  }
+};
+} //  Namespace "detail"
+} //  Namespace "mingw_stdthread"
+namespace std
+{
+
 
 //    Unfortunately, MinGW's <future> locks us into a particular (non-standard)
 //  signature for async.
@@ -982,26 +1047,43 @@ std::future<__async_result_of<Function, Args...> >
 
   //auto setter = []
 
-  state_type * state_ptr;
+  state_type * state_ptr = nullptr;
   /*if ((policy & std::launch::async) == std::launch::async)
     state_ptr = new state_type ();
-  else*/
-    state_ptr = new state_type (std::function<result_type(void)>(std::bind(std::forward<Function>(f), std::forward<Args>(args)...)));
-
-  future<result_type> result { state_ptr };
+  else
+    state_ptr = new state_type (std::function<result_type(void)>(std::bind(std::forward<Function>(f), std::forward<Args>(args)...)));*/
 
 
-  /*if ((policy & std::launch::async) == std::launch::async)
+  if ((policy & std::launch::async) == std::launch::async)
   {
+    auto deleter = [](state_type * ptr) { ptr->decrement_references(); };
+    state_ptr = new state_type ();
     state_ptr->increment_references();
-    mingw_stdthread::thread t ([](state_type * ptr, typename std::decay<Function>::type f2, typename std::decay<Args>::type... args2)
+    std::unique_ptr<state_type, decltype(deleter)> ooptr { state_ptr, deleter };
+    mingw_stdthread::thread t ([](decltype(ooptr) ptr, typename std::decay<Function>::type f2, typename std::decay<Args>::type... args2)
       {
-//        mingw_stdthread::detail::StoreHelper<result_type, promise<result_type> >
-        ptr->decrement_references();
-      }, state_ptr, std::forward<Function>(f), std::forward<Args>(args)...);
+        typedef mingw_stdthread::detail::StorageHelper<result_type> s_helper;
+        s_helper::store(ptr.get(), f2, args2...);
+      }, std::move(ooptr), std::forward<Function>(f), std::forward<Args>(args)...);
     t.detach();
-  }*/
-  return result;
+  } else {
+    typedef std::function<result_type(void)> func_type;
+    struct Packed
+    {
+      func_type func;
+      state_type * ptr;
+    };
+    std::shared_ptr<Packed>  bound { new Packed { std::bind(std::forward<Function>(f), std::forward<Args>(args)...), nullptr } };
+    state_ptr = new state_type (std::function<void(void)>([bound](void)
+      {
+        typedef mingw_stdthread::detail::StorageHelper<result_type> s_helper;
+        s_helper::store_deferred(bound->ptr, std::move(bound->func));
+      }));
+    bound->ptr = state_ptr;
+  }
+  assert(state_ptr != nullptr);
+  //future<result_type> result { state_ptr };
+  return future<result_type> { state_ptr };
 }
 
 #if (defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS))
