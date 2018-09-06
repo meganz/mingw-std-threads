@@ -99,7 +99,7 @@ struct CustomAllocator
 template<class T>
 void test_future ()
 {
-  /*static_assert(is_move_constructible<promise<T> >::value,
+  static_assert(is_move_constructible<promise<T> >::value,
                 "std::promise must be move-constructible.");
   static_assert(is_move_assignable<promise<T> >::value,
                 "std::promise must be move-assignable.");
@@ -191,7 +191,7 @@ void test_future ()
     LOG("WARNING: %s","Got a value where there should be an exception!");
   } catch (std::future_error & e) {
     LOG("\tReceived a future_error (\"%s\") as expected.", e.what());
-  }*/
+  }
 
   LOG("\t%s", "Deferring a function...");
   auto async_deferred = async(launch::deferred, [] (void) -> T
