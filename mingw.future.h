@@ -935,7 +935,7 @@ struct StorageHelper
   static void store_deferred (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
   {
     try {
-      state_ptr->set_value(std::forward<Func>(func)(std::forward<Args>(args)...));
+      state_ptr->set_value(mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...));
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
     }
@@ -958,7 +958,8 @@ struct StorageHelper<Ref&>
   {
     try {
       typedef typename std::remove_cv<Ref>::type Ref_non_cv;
-      Ref & rf = std::forward<Func>(func)(std::forward<Args>(args)...);
+      //Ref & rf = std::forward<Func>(func)(std::forward<Args>(args)...);
+      Ref & rf = mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
@@ -981,7 +982,8 @@ struct StorageHelper<void>
   static void store_deferred (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
   {
     try {
-      std::forward<Func>(func)(std::forward<Args>(args)...);
+      //std::forward<Func>(func)(std::forward<Args>(args)...);
+      mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(Empty{});
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
