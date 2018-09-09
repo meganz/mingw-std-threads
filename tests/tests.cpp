@@ -219,11 +219,27 @@ void test_future ()
     }, this_thread::get_id());
 
   LOG("\t%s", "Fetching asynchronous result.");
-  async_async.get();
+  test_future_get_value(async_async);
   LOG("\t%s", "Fetching deferred result.");
-  async_deferred.get();
+  test_future_get_value(async_deferred);
   LOG("\t%s", "Fetching implementation-defined result.");
-  async_either.get();
+  test_future_get_value(async_either);
+
+  LOG("\t%s", "Testing async on pointer-to-member-function.");
+  struct Helper
+  {
+    thread::id other_id;
+    T call (void) const
+    {
+      std::hash<thread::id> hasher;
+      LOG("\t\tFunction called on thread %zu. Implementation chose %s execution.", hasher(this_thread::get_id()), (this_thread::get_id() == other_id) ? "deferred" : "asynchronous");
+      if (!is_void<T>::value)
+        return T(test_int);
+    }
+  } test_class { this_thread::get_id() };
+  auto async_member = async(Helper::call, test_class);
+  LOG("\t%s", "Fetching result.");
+  test_future_get_value(async_member);
 }
 
 int main()
