@@ -2,6 +2,7 @@
 #include "../mingw.mutex.h"
 #include "../mingw.condition_variable.h"
 #include "../mingw.shared_mutex.h"
+#include "../mingw.future.h"
 #include <atomic>
 #include <cassert>
 #include <string>
@@ -10,16 +11,21 @@
 
 using namespace std;
 
+int test_int = 42;
+
+//  Pre-declaration to suppress some warnings.
+void test_call_once(int, char const *);
+
 int cond = 0;
 std::mutex m;
 std::shared_mutex sm;
 std::condition_variable cv;
 std::condition_variable_any cv_any;
-#define LOG(fmtString,...) printf(fmtString "\n", ##__VA_ARGS__); fflush(stdout)
+#define LOG(fmtString,...) { printf(fmtString "\n", ##__VA_ARGS__); fflush(stdout); }
 void test_call_once(int a, const char* str)
 {
     LOG("test_call_once called with a=%d, str=%s", a, str);
-    this_thread::sleep_for(std::chrono::milliseconds(5000));
+    this_thread::sleep_for(std::chrono::milliseconds(500));
 }
 
 struct TestMove
@@ -33,6 +39,208 @@ struct TestMove
         assert(false && "TestMove: Object COPIED instead of moved");
     }
 };
+
+template<class T>
+void test_future_set_value (promise<T> & promise)
+{
+  promise.set_value(T(test_int));
+}
+
+template<>
+void test_future_set_value (promise<void> & promise)
+{
+  promise.set_value();
+}
+
+template<class T>
+bool test_future_get_value (future<T> & future)
+{
+  return (future.get() == T(test_int));
+}
+
+template<>
+bool test_future_get_value (future<void> & future)
+{
+  future.get();
+  return true;
+}
+
+template<class T>
+struct CustomAllocator
+{
+  CustomAllocator (void) noexcept
+  {
+  }
+
+  template<class U>
+  CustomAllocator (CustomAllocator<U> const &) noexcept
+  {
+  }
+
+  template<class U>
+  CustomAllocator<T> & operator= (CustomAllocator<U> const &) noexcept
+  {
+    return *this;
+  }
+
+  typedef T value_type;
+  T * allocate (size_t n)
+  {
+    LOG("Used custom allocator to allocate %zu object(s).", n);
+    return static_cast<T*>(std::malloc(n * sizeof(T)));
+  }
+  void deallocate (T * ptr, size_t n)
+  {
+    LOG("Used custom allocator to deallocate %zu object(s).", n);
+    std::free(ptr);
+  }
+};
+
+template<class T>
+void test_future ()
+{
+  static_assert(is_move_constructible<promise<T> >::value,
+                "std::promise must be move-constructible.");
+  static_assert(is_move_assignable<promise<T> >::value,
+                "std::promise must be move-assignable.");
+  static_assert(!is_copy_constructible<promise<T> >::value,
+                "std::promise must not be copy-constructible.");
+  static_assert(!is_copy_assignable<promise<T> >::value,
+                "std::promise must not be copy-assignable.");
+
+  static_assert(is_move_constructible<future<T> >::value,
+                "std::future must be move-constructible.");
+  static_assert(is_move_assignable<future<T> >::value,
+                "std::future must be move-assignable.");
+  static_assert(!is_copy_constructible<future<T> >::value,
+                "std::future must not be copy-constructible.");
+  static_assert(!is_copy_assignable<future<T> >::value,
+                "std::future must not be copy-assignable.");
+
+  static_assert(is_move_constructible<shared_future<T> >::value,
+                "std::shared_future must be move-constructible.");
+  static_assert(is_move_assignable<shared_future<T> >::value,
+                "std::shared_future must be move-assignable.");
+  static_assert(is_copy_constructible<shared_future<T> >::value,
+                "std::shared_future must be copy-constructible.");
+  static_assert(is_copy_assignable<shared_future<T> >::value,
+                "std::shared_future must be copy-assignable.");
+
+  LOG("\t%s","Making a few promises, and getting their futures...");
+  promise<T> promise_value, promise_exception, promise_broken, promise_late;
+
+  future<T> future_value = promise_value.get_future();
+  future<T> future_exception = promise_exception.get_future();
+  future<T> future_broken = promise_broken.get_future();
+  future<T> future_late = promise_late.get_future();
+
+  try {
+    future<T> impossible_future = promise_value.get_future();
+    LOG("WARNING: %s","Promise failed to detect that its future was already retrieved.");
+  } catch(...) {
+    LOG("\t%s","Promise successfully prevented redundant future retrieval.");
+  }
+
+  LOG("\t%s","Passing promises to a new thread...");
+  thread t ([](promise<T> p_value, promise<T> p_exception, promise<T>, promise<T> p_late)
+    {
+      this_thread::sleep_for(std::chrono::seconds(1));
+      try {
+        throw std::runtime_error("Thrown during the thread.");
+      } catch (...) {
+        p_late.set_exception_at_thread_exit(std::current_exception());
+      }
+      test_future_set_value(p_value);
+      try {
+        throw std::runtime_error("Things happened as expected.");
+      } catch (...) {
+        p_exception.set_exception(std::current_exception());
+      }
+      this_thread::sleep_for(std::chrono::seconds(2));
+    },
+    std::move(promise_value),
+    std::move(promise_exception),
+    std::move(promise_broken),
+    std::move(promise_late));
+  t.detach();
+
+  try {
+    bool was_expected = test_future_get_value(future_value);
+    LOG("\tReceived %sexpected value.", (was_expected ? "" : "un"));
+  } catch (...) {
+    LOG("WARNING: %s","Exception where there should be none!");
+    throw;
+  }
+  try {
+    test_future_get_value(future_exception);
+    LOG("WARNING: %s","Got a value where there should be an exception!");
+  } catch (std::exception & e) {
+    LOG("\tReceived an exception (\"%s\") as expected.", e.what());
+  }
+
+  LOG("\t%s", "Waiting for the thread to exit...");
+  try {
+    test_future_get_value(future_late);
+    LOG("WARNING: %s","Got a value where there should be an exception!");
+  } catch (std::exception & e) {
+    LOG("\tReceived an exception (\"%s\") as expected.", e.what());
+  }
+
+  try {
+    test_future_get_value(future_broken);
+    LOG("WARNING: %s","Got a value where there should be an exception!");
+  } catch (std::future_error & e) {
+    LOG("\tReceived a future_error (\"%s\") as expected.", e.what());
+  }
+
+  LOG("\t%s", "Deferring a function...");
+  auto async_deferred = async(launch::deferred, [] (void) -> T
+    {
+      std::hash<std::thread::id> hasher;
+      LOG("\t\tDeferred function called on thread %zu", hasher(std::this_thread::get_id()));
+      if (!is_void<T>::value)
+        return T(test_int);
+    });
+  LOG("\t%s", "Calling a function asynchronously...");
+  auto async_async = async(launch::async, [] (void) -> T
+    {
+      std::hash<std::thread::id> hasher;
+      LOG("\t\tAsynchronous function called on thread %zu", hasher(std::this_thread::get_id()));
+      if (!is_void<T>::value)
+        return T(test_int);
+    });
+  LOG("\t%s", "Letting the implementation decide...");
+  auto async_either = async([] (thread::id other_id) -> T
+    {
+      std::hash<thread::id> hasher;
+      LOG("\t\tFunction called on thread %zu. Implementation chose %s execution.", hasher(this_thread::get_id()), (this_thread::get_id() == other_id) ? "deferred" : "asynchronous");
+      if (!is_void<T>::value)
+        return T(test_int);
+    }, this_thread::get_id());
+
+  LOG("\t%s", "Fetching asynchronous result.");
+  test_future_get_value(async_async);
+  LOG("\t%s", "Fetching deferred result.");
+  test_future_get_value(async_deferred);
+  LOG("\t%s", "Fetching implementation-defined result.");
+  test_future_get_value(async_either);
+
+  LOG("\t%s", "Testing async on pointer-to-member-function.");
+  struct Helper
+  {
+    thread::id other_id;
+    T call (void) const
+    {
+      std::hash<thread::id> hasher;
+      LOG("\t\tFunction called on thread %zu. Implementation chose %s execution.", hasher(this_thread::get_id()), (this_thread::get_id() == other_id) ? "deferred" : "asynchronous");
+      if (!is_void<T>::value)
+        return T(test_int);
+    }
+  } test_class { this_thread::get_id() };
+  auto async_member = async(Helper::call, test_class);
+  LOG("\t%s", "Fetching result.");
+  test_future_get_value(async_member);
+}
 
 int main()
 {
@@ -90,7 +298,7 @@ int main()
             assert(!strcmp(b, "test message"));
             assert(c == -20);
             auto move2nd = std::move(a); //test move to final destination
-            this_thread::sleep_for(std::chrono::milliseconds(5000));
+            this_thread::sleep_for(std::chrono::milliseconds(1000));
             {
                 lock_guard<mutex> lock(m);
                 cond = 1;
@@ -159,5 +367,19 @@ int main()
     call_once(of, test_call_once, 1, "test");
     call_once(of, test_call_once, 1, "ERROR! Should not be called second time");
     LOG("%s","Test complete");
+
+    {
+      LOG("%s","Testing implementation of <future>...");
+      test_future<int>();
+      test_future<void>();
+      test_future<int &>();
+      test_future<int const &>();
+      test_future<int volatile &>();
+      test_future<int const volatile &>();
+      LOG("%s","Testing <future>'s use of allocators. Should allocate, then deallocate.");
+      promise<int> allocated_promise (std::allocator_arg, CustomAllocator<unsigned>());
+      allocated_promise.set_value(7);
+    }
+
     return 0;
 }
