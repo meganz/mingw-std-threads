@@ -336,7 +336,7 @@ namespace this_thread
         while (ms > 0)
         {
             DWORD sleepTime = std::min(ms, static_cast<std::chrono::milliseconds::rep>(
-                std::numeric_limits<DWORD>::max() - 1));
+                INFINITE - 1));
             Sleep(sleepTime);
             ms -= sleepTime;
         }
