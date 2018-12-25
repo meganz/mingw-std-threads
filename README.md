@@ -24,8 +24,8 @@ This code has been tested to work with MinGW-w64 5.3.0, but should work with any
 that has the std threading classes missing, has C++11 support for lambda functions, variadic
 templates, and has working mutex helper classes in &lt;mutex&gt;.  
 
-Switching from the win32-pthread based implemetation
-====================================================
+Switching from the win32-pthread based implementation
+=====================================================
 It seems that recent versions of mingw-w64 include a win32 port of pthreads, and have
 the std::thread, std::mutex etc classes implemented and working, based on that compatibility
 layer. This is a somewhat heavier implementation, as it brings a not very thin abstraction layer.

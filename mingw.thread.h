@@ -37,6 +37,8 @@
 #include <process.h>
 #include <ostream>
 #include <type_traits>
+#include <limits>
+#include <algorithm>
 
 #ifndef NDEBUG
 #include <cstdio>
@@ -328,7 +330,16 @@ namespace this_thread
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
-        Sleep(std::chrono::duration_cast<std::chrono::milliseconds>(sleep_duration).count());
+        std::chrono::milliseconds::rep ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>
+            (sleep_duration).count();
+        while (ms > 0)
+        {
+            DWORD sleepTime = std::min(ms, static_cast<std::chrono::milliseconds::rep>(
+                INFINITE - 1));
+            Sleep(sleepTime);
+            ms -= sleepTime;
+        }
     }
     template <class Clock, class Duration>
     void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)
