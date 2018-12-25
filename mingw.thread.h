@@ -335,9 +335,10 @@ namespace this_thread
             (sleep_duration).count();
         while (ms > 0)
         {
-            Sleep(std::min(ms, static_cast<std::chrono::milliseconds::rep>(
-                std::numeric_limits<DWORD>::max())));
-            ms -= std::numeric_limits<DWORD>::max();
+            DWORD sleepTime = std::min(ms, static_cast<std::chrono::milliseconds::rep>(
+                std::numeric_limits<DWORD>::max() - 1));
+            Sleep(sleepTime);
+            ms -= sleepTime;
         }
     }
     template <class Clock, class Duration>
