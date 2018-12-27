@@ -108,7 +108,8 @@ public:
                 expected = mCounter.load(std::memory_order_relaxed);
                 continue;
             }
-            if (mCounter.compare_exchange_weak(expected, expected + 1,
+            if (mCounter.compare_exchange_weak(expected,
+                                               static_cast<counter_type>(expected + 1),
                                                std::memory_order_acquire,
                                                std::memory_order_relaxed))
                 break;
@@ -118,11 +119,12 @@ public:
 
     bool try_lock_shared (void)
     {
-        counter_type expected = mCounter.load(std::memory_order_relaxed) & (~kWriteBit);
+        counter_type expected = static_cast<counter_type>(mCounter.load(std::memory_order_relaxed) & (~kWriteBit));
         if (expected + 1 == kWriteBit)
             return false;
         else
-            return mCounter.compare_exchange_strong( expected, expected + 1,
+            return mCounter.compare_exchange_strong( expected,
+                                                    static_cast<counter_type>(expected + 1),
                                                     std::memory_order_acquire,
                                                     std::memory_order_relaxed);
     }
