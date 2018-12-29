@@ -346,7 +346,7 @@ public:
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
         using namespace std::chrono;
-        DWORD timeout = (DWORD)duration_cast<milliseconds>(dur).count();
+        DWORD timeout = static_cast<DWORD>(duration_cast<milliseconds>(dur).count());
         return try_lock_internal(timeout);
     }
     template <class Clock, class Duration>

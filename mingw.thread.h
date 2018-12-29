@@ -160,7 +160,7 @@ namespace detail
 
         void callFunc()
         {
-            callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
+            callFunc(typename detail::GenIntSeq<static_cast<int>(sizeof...(Args))>::type());
         }
     };
 
