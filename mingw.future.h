@@ -380,10 +380,7 @@ class future : mingw_stdthread::detail::FutureBase
     }
   }
 
-  shared_future<T> share (void) noexcept
-  {
-    return std::move(shared_future<T>(std::move(*this)));
-  }
+  shared_future<T> share (void) noexcept;
 
   void wait (void) const
   {
@@ -749,12 +746,6 @@ class shared_future<T&> : shared_future<void *>
 };
 
 template<class T>
-shared_future<T&> future<T&>::share (void) noexcept
-{
-  return std::move(shared_future<T&>(std::move(*this)));
-}
-
-template<class T>
 class promise<T&> : private promise<void *>
 {
   typedef promise<void *> Base;
@@ -868,10 +859,10 @@ class shared_future<void> : shared_future<mingw_stdthread::detail::Empty>
   ~shared_future (void) = default;
 };
 
-shared_future<void> future<void>::share (void) noexcept
+template<class T>
+shared_future<T> future<T>::share (void) noexcept
 {
-  return std::move(shared_future<void>(std::move(*this)));
-  //return future<Empty>::share();
+  return shared_future<void>(std::move(*this));
 }
 
 template<>
