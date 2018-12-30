@@ -119,7 +119,7 @@ public:
 
     bool try_lock_shared (void)
     {
-        counter_type expected = static_cast<counter_type>(mCounter.load(std::memory_order_relaxed) & (~kWriteBit));
+        counter_type expected = mCounter.load(std::memory_order_relaxed) & static_cast<counter_type>(~kWriteBit);
         if (expected + 1 == kWriteBit)
             return false;
         else
@@ -133,7 +133,7 @@ public:
     {
         using namespace std;
 #ifndef NDEBUG
-        if (!(mCounter.fetch_sub(1, memory_order_release) & (~kWriteBit)))
+        if (!(mCounter.fetch_sub(1, memory_order_release) & static_cast<counter_type>(~kWriteBit)))
             throw system_error(make_error_code(errc::operation_not_permitted));
 #else
         mCounter.fetch_sub(1, memory_order_release);

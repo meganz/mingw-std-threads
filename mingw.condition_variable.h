@@ -100,7 +100,7 @@ protected:
 //we decremented it. This means that the semaphore count
 //after all waiters finish won't be 0 - because not all waiters
 //woke up by acquiring the semaphore - we woke up by a timeout.
-//The notify_all() must handle this grafecully
+//The notify_all() must handle this gracefully
 //
         else
         {
@@ -164,10 +164,9 @@ public:
                        const std::chrono::duration<Rep, Period>& rel_time)
     {
         using namespace std::chrono;
-        long long timeout = duration_cast<milliseconds>(rel_time).count();
-        if (timeout < 0)
-            timeout = 0;
-        bool ret = wait_impl(lock, (DWORD)timeout);
+        auto timeout = duration_cast<milliseconds>(rel_time).count();
+        DWORD waittime = (timeout < INFINITE) ? ((timeout < 0) ? 0 : static_cast<DWORD>(timeout)) : (INFINITE - 1);
+        bool ret = wait_impl(lock, waittime) || (timeout >= INFINITE);
         return ret?cv_status::no_timeout:cv_status::timeout;
     }
 
@@ -342,10 +341,9 @@ public:
                        const std::chrono::duration<Rep, Period>& rel_time)
     {
         using namespace std::chrono;
-        auto time = duration_cast<milliseconds>(rel_time).count();
-        if (time < 0)
-            time = 0;
-        bool result = wait_impl(lock, static_cast<DWORD>(time));
+        auto timeout = duration_cast<milliseconds>(rel_time).count();
+        DWORD waittime = (timeout < INFINITE) ? ((timeout < 0) ? 0 : static_cast<DWORD>(timeout)) : (INFINITE - 1);
+        bool result = wait_impl(lock, waittime) || (timeout >= INFINITE);
         return result ? cv_status::no_timeout : cv_status::timeout;
     }
 
@@ -459,13 +457,12 @@ public:
     }
 
     template <class L, class Rep, class Period>
-    cv_status wait_for(L& lock, const std::chrono::duration<Rep, Period>& period)
+    cv_status wait_for(L& lock, const std::chrono::duration<Rep,Period>& period)
     {
         using namespace std::chrono;
-        auto time = duration_cast<milliseconds>(period).count();
-        if (time < 0)
-            time = 0;
-        bool result = wait_impl(lock, static_cast<DWORD>(time));
+        auto timeout = duration_cast<milliseconds>(period).count();
+        DWORD waittime = (timeout < INFINITE) ? ((timeout < 0) ? 0 : static_cast<DWORD>(timeout)) : (INFINITE - 1);
+        bool result = wait_impl(lock, waittime) || (timeout >= INFINITE);
         return result ? cv_status::no_timeout : cv_status::timeout;
     }
 

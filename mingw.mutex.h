@@ -41,6 +41,7 @@
 #include <atomic>
 #include <mutex> //need for call_once()
 #include <cassert>
+#include <algorithm>  //  For std::min
 
 //  Need for yield in spinlock and the implementation of invoke
 #include "mingw.thread.h"
@@ -346,8 +347,15 @@ public:
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
         using namespace std::chrono;
-        DWORD timeout = static_cast<DWORD>(duration_cast<milliseconds>(dur).count());
-        return try_lock_internal(timeout);
+        auto timeout = duration_cast<milliseconds>(dur).count();
+        while (timeout > 0)
+        {
+          auto step = std::min(timeout, static_cast<decltype(timeout)>(INFINITE - 1));
+          if (try_lock_internal(static_cast<DWORD>(step)))
+            return true;
+          timeout -= step;
+        }
+        return false;
     }
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
