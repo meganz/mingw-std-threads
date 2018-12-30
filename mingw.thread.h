@@ -330,13 +330,12 @@ namespace this_thread
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
-        std::chrono::milliseconds::rep ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>
-            (sleep_duration).count();
+        using namespace std::chrono;
+        using rep = milliseconds::rep;
+        rep ms = duration_cast<milliseconds>(sleep_duration).count();
         while (ms > 0)
         {
-            auto sleepTime = std::min(ms, static_cast<std::chrono::milliseconds::rep>(
-                INFINITE - 1));
+            auto sleepTime = std::min(ms, static_cast<rep>(INFINITE - 1));
             Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;
         }
