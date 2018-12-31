@@ -281,7 +281,7 @@ public:
         return &mHandle;
     }
 };
-}
+} //  Namespace "xp"
 #if (WINVER >= _WIN32_WINNT_WIN7)
 using windows7::mutex;
 #else
@@ -290,21 +290,10 @@ using xp::mutex;
 
 class recursive_timed_mutex
 {
-    bool try_lock_internal (DWORD ms)
+    inline bool try_lock_internal (DWORD ms)
     {
-        DWORD ret = WaitForSingleObject(mHandle, ms);
-        using namespace std;
-        switch (ret)
-        {
-        case WAIT_TIMEOUT:
-            return false;
-        case WAIT_OBJECT_0:
-            return true;
-        case WAIT_ABANDONED:
-            throw system_error(make_error_code(errc::owner_dead));
-        default:
-            throw system_error(make_error_code(errc::protocol_error));
-        }
+        assert(ms != INFINITE);
+        return (WaitForSingleObject(mHandle, ms) == WAIT_OBJECT_0);
     }
 protected:
     HANDLE mHandle;
@@ -331,7 +320,14 @@ public:
     }
     void lock()
     {
-        try_lock_internal(INFINITE);
+        DWORD ret = WaitForSingleObject(mHandle, INFINITE);
+        if (ret != WAIT_OBJECT_0)
+        {
+            using namespace std;
+            throw system_error(make_error_code((ret == WAIT_ABANDONED) ?
+                                                  errc::owner_dead :
+                                                  errc::protocol_error));
+        }
     }
     void unlock()
     {
