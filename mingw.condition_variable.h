@@ -50,7 +50,6 @@ namespace xp
 #if (WINVER < _WIN32_WINNT_VISTA)
 class condition_variable_any
 {
-protected:
     recursive_mutex mMutex;
     std::atomic<int> mNumWaiters;
     HANDLE mSemaphore;
@@ -73,7 +72,7 @@ public:
         CloseHandle(mWakeEvent);
         CloseHandle(mSemaphore);
     }
-protected:
+private:
     template <class M>
     bool wait_impl(M& lock, DWORD timeout)
     {
@@ -197,9 +196,8 @@ public:
         return true;
     }
 };
-class condition_variable: protected condition_variable_any
+class condition_variable: condition_variable_any
 {
-protected:
     typedef condition_variable_any base;
 public:
     using base::native_handle_type;
@@ -246,7 +244,6 @@ namespace vista
 //  If compiling for Vista or higher, use the native condition variable.
 class condition_variable
 {
-protected:
     CONDITION_VARIABLE cvariable_;
 
 #if STDMUTEX_RECURSION_CHECKS
@@ -265,6 +262,7 @@ protected:
     inline static void after_wait (void *) { }
 #endif
 
+protected:
     bool wait_impl (unique_lock<xp::mutex> & lock, DWORD time)
     {
         static_assert(std::is_same<typename xp::mutex::native_handle_type, PCRITICAL_SECTION>::value,
@@ -378,9 +376,8 @@ public:
     }
 };
 
-class condition_variable_any : protected condition_variable
+class condition_variable_any : condition_variable
 {
-protected:
     typedef condition_variable base;
     typedef windows7::shared_mutex native_shared_mutex;
 
@@ -411,7 +408,6 @@ protected:
 CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The value for \
 exclusive mode is unknown (not specified by Microsoft Dev Center), but assumed \
 to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
-//#if (WINVER >= _WIN32_WINNT_VISTA)
     bool wait_impl (unique_lock<native_shared_mutex> & lock, DWORD time)
     {
         native_shared_mutex * pmutex = lock.release();
@@ -428,7 +424,6 @@ to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
         lock = shared_lock<native_shared_mutex>(*pmutex, adopt_lock);
         return success;
     }
-//#endif
 public:
     typedef typename base::native_handle_type native_handle_type;
     using base::native_handle;
