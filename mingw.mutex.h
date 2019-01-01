@@ -147,17 +147,13 @@ class mutex
 //  Track locking thread for error checking.
 #if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef PSRWLOCK native_handle_type;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
-    constexpr mutex () noexcept : mHandle(SRWLOCK_INIT)
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    { }
+    constexpr mutex () noexcept : mHandle(SRWLOCK_INIT) { }
 #pragma GCC diagnostic pop
     mutex (const mutex&) = delete;
     mutex & operator= (const mutex&) = delete;
@@ -209,15 +205,11 @@ class mutex
 //  Track locking thread for error checking.
 #if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef PCRITICAL_SECTION native_handle_type;
-    constexpr mutex () noexcept : mHandle(), mState(2)
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    { }
+    constexpr mutex () noexcept : mHandle(), mState(2) { }
     mutex (const mutex&) = delete;
     mutex & operator= (const mutex&) = delete;
     ~mutex() noexcept
@@ -295,25 +287,21 @@ class recursive_timed_mutex
         assert(ms != INFINITE);
         return (WaitForSingleObject(mHandle, ms) == WAIT_OBJECT_0);
     }
-protected:
     HANDLE mHandle;
+protected:
 //    Track locking thread for error checking of non-recursive timed_mutex. For
 //  standard compliance, this must be defined in same class and at the same
 //  access-control level as every other variable in the timed_mutex.
 #if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef HANDLE native_handle_type;
     native_handle_type native_handle() const {return mHandle;}
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
-    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL))
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    {}
+    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL)) {}
     ~recursive_timed_mutex()
     {
         CloseHandle(mHandle);
