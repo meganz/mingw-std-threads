@@ -41,6 +41,7 @@
 #include <atomic>
 #include <mutex> //need for call_once()
 #include <cassert>
+#include <algorithm>  //  For std::min
 
 //  Need for yield in spinlock and the implementation of invoke
 #include "mingw.thread.h"
@@ -146,17 +147,13 @@ class mutex
 //  Track locking thread for error checking.
 #if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef PSRWLOCK native_handle_type;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
-    constexpr mutex () noexcept : mHandle(SRWLOCK_INIT)
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    { }
+    constexpr mutex () noexcept : mHandle(SRWLOCK_INIT) { }
 #pragma GCC diagnostic pop
     mutex (const mutex&) = delete;
     mutex & operator= (const mutex&) = delete;
@@ -208,15 +205,11 @@ class mutex
 //  Track locking thread for error checking.
 #if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef PCRITICAL_SECTION native_handle_type;
-    constexpr mutex () noexcept : mHandle(), mState(2)
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    { }
+    constexpr mutex () noexcept : mHandle(), mState(2) { }
     mutex (const mutex&) = delete;
     mutex & operator= (const mutex&) = delete;
     ~mutex() noexcept
@@ -280,7 +273,7 @@ public:
         return &mHandle;
     }
 };
-}
+} //  Namespace "xp"
 #if (WINVER >= _WIN32_WINNT_WIN7)
 using windows7::mutex;
 #else
@@ -289,48 +282,40 @@ using xp::mutex;
 
 class recursive_timed_mutex
 {
-    bool try_lock_internal (DWORD ms)
+    inline bool try_lock_internal (DWORD ms)
     {
-        DWORD ret = WaitForSingleObject(mHandle, ms);
-        using namespace std;
-        switch (ret)
-        {
-        case WAIT_TIMEOUT:
-            return false;
-        case WAIT_OBJECT_0:
-            return true;
-        case WAIT_ABANDONED:
-            throw system_error(make_error_code(errc::owner_dead));
-        default:
-            throw system_error(make_error_code(errc::protocol_error));
-        }
+        assert(ms != INFINITE);
+        return (WaitForSingleObject(mHandle, ms) == WAIT_OBJECT_0);
     }
-protected:
     HANDLE mHandle;
+protected:
 //    Track locking thread for error checking of non-recursive timed_mutex. For
 //  standard compliance, this must be defined in same class and at the same
 //  access-control level as every other variable in the timed_mutex.
 #if STDMUTEX_RECURSION_CHECKS
     friend class vista::condition_variable;
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef HANDLE native_handle_type;
     native_handle_type native_handle() const {return mHandle;}
     recursive_timed_mutex(const recursive_timed_mutex&) = delete;
     recursive_timed_mutex& operator=(const recursive_timed_mutex&) = delete;
-    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL))
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    {}
+    recursive_timed_mutex(): mHandle(CreateMutex(NULL, FALSE, NULL)) {}
     ~recursive_timed_mutex()
     {
         CloseHandle(mHandle);
     }
     void lock()
     {
-        try_lock_internal(INFINITE);
+        DWORD ret = WaitForSingleObject(mHandle, INFINITE);
+        if (ret != WAIT_OBJECT_0)
+        {
+            using namespace std;
+            throw system_error(make_error_code((ret == WAIT_ABANDONED) ?
+                                                  errc::owner_dead :
+                                                  errc::protocol_error));
+        }
     }
     void unlock()
     {
@@ -346,8 +331,15 @@ public:
     bool try_lock_for(const std::chrono::duration<Rep,Period>& dur)
     {
         using namespace std::chrono;
-        DWORD timeout = static_cast<DWORD>(duration_cast<milliseconds>(dur).count());
-        return try_lock_internal(timeout);
+        auto timeout = duration_cast<milliseconds>(dur).count();
+        while (timeout > 0)
+        {
+          auto step = std::min(timeout, static_cast<decltype(timeout)>(INFINITE - 1));
+          if (try_lock_internal(static_cast<DWORD>(step)))
+            return true;
+          timeout -= step;
+        }
+        return false;
     }
     template <class Clock, class Duration>
     bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)

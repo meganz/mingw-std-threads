@@ -380,10 +380,7 @@ class future : mingw_stdthread::detail::FutureBase
     }
   }
 
-  shared_future<T> share (void) noexcept
-  {
-    return std::move(shared_future<T>(std::move(*this)));
-  }
+  shared_future<T> share (void) noexcept;
 
   void wait (void) const
   {
@@ -613,9 +610,8 @@ class promise : mingw_stdthread::detail::FutureBase
   void set_value (T const & value)
   {
     {
-      std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
+      std::lock_guard<mingw_stdthread::mutex> lock { get_mutex() };
       check_before_set();
-//    std::unique_lock<mutex> lock {detail::FutureStatic<true>::get_mutex(state_ptr_.get()); };
       static_cast<state_type *>(mState)->set_value(value);
     }
     get_condition_variable().notify_all();
@@ -624,7 +620,7 @@ class promise : mingw_stdthread::detail::FutureBase
   void set_value (T && value)
   {
     {
-      std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
+      std::lock_guard<mingw_stdthread::mutex> lock { get_mutex() };
       check_before_set();
       static_cast<state_type *>(mState)->set_value(std::move(value));
     }
@@ -634,9 +630,8 @@ class promise : mingw_stdthread::detail::FutureBase
   void set_value_at_thread_exit (T const & value)
   {
     {
-      std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
+      std::lock_guard<mingw_stdthread::mutex> lock { get_mutex() };
       check_before_set();
-//    std::unique_lock<mutex> lock {detail::FutureStatic<true>::get_mutex(state_ptr_.get()); };
       static_cast<state_type *>(mState)->set_value(value, false);
     }
     make_ready_at_thread_exit();
@@ -645,7 +640,7 @@ class promise : mingw_stdthread::detail::FutureBase
   void set_value_at_thread_exit (T && value)
   {
     {
-      std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
+      std::lock_guard<mingw_stdthread::mutex> lock { get_mutex() };
       check_before_set();
       static_cast<state_type *>(mState)->set_value(std::move(value), false);
     }
@@ -655,7 +650,7 @@ class promise : mingw_stdthread::detail::FutureBase
   void set_exception (std::exception_ptr eptr)
   {
     {
-      std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
+      std::lock_guard<mingw_stdthread::mutex> lock { get_mutex() };
       check_before_set();
       static_cast<state_type *>(mState)->set_exception(eptr);
     }
@@ -665,7 +660,7 @@ class promise : mingw_stdthread::detail::FutureBase
   void set_exception_at_thread_exit (std::exception_ptr eptr)
   {
     {
-      std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
+      std::lock_guard<mingw_stdthread::mutex> lock { get_mutex() };
       check_before_set();
       static_cast<state_type *>(mState)->set_exception(eptr, false);
     }
@@ -724,16 +719,6 @@ class shared_future<T&> : shared_future<void *>
     return *static_cast<T *>(Base::get());
   }
 
-  /*shared_future (void) noexcept = default;
-
-  shared_future (shared_future<T&> && source) noexcept = default;
-
-  shared_future<T&> & operator= (shared_future<T&> && source) noexcept = default;
-
-  shared_future (shared_future<T&> const & source) noexcept(__cplusplus >= 201703L) = default;
-
-  shared_future<T&> & operator= (shared_future<T&> const & source) noexcept(__cplusplus >= 201703L) = default;*/
-
   shared_future (future<T&> && source) noexcept
     : Base(std::move(source))
   {
@@ -747,12 +732,6 @@ class shared_future<T&> : shared_future<void *>
 
   ~shared_future (void) = default;
 };
-
-template<class T>
-shared_future<T&> future<T&>::share (void) noexcept
-{
-  return std::move(shared_future<T&>(std::move(*this)));
-}
 
 template<class T>
 class promise<T&> : private promise<void *>
@@ -868,10 +847,10 @@ class shared_future<void> : shared_future<mingw_stdthread::detail::Empty>
   ~shared_future (void) = default;
 };
 
-shared_future<void> future<void>::share (void) noexcept
+template<class T>
+shared_future<T> future<T>::share (void) noexcept
 {
-  return std::move(shared_future<void>(std::move(*this)));
-  //return future<Empty>::share();
+  return shared_future<void>(std::move(*this));
 }
 
 template<>
@@ -943,9 +922,10 @@ struct StorageHelper
   template<class Func, class ... Args>
   static void store (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
   {
-    std::unique_lock<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
-    store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
-    lock.unlock();
+    {
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+      store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    }
     state_ptr->get_condition_variable().notify_all();
   }
 };
@@ -958,7 +938,6 @@ struct StorageHelper<Ref&>
   {
     try {
       typedef typename std::remove_cv<Ref>::type Ref_non_cv;
-      //Ref & rf = std::forward<Func>(func)(std::forward<Args>(args)...);
       Ref & rf = mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
     } catch (...) {
@@ -968,9 +947,10 @@ struct StorageHelper<Ref&>
   template<class Func, class ... Args>
   static void store (FutureState<void*> * state_ptr, Func && func, Args&&... args)
   {
-    std::unique_lock<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
-    store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
-    lock.unlock();
+    {
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+      store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    }
     state_ptr->get_condition_variable().notify_all();
   }
 };
@@ -992,9 +972,10 @@ struct StorageHelper<void>
   template<class Func, class ... Args>
   static void store (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
   {
-    std::unique_lock<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
-    store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
-    lock.unlock();
+    {
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+      store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    }
     state_ptr->get_condition_variable().notify_all();
   }
 };
@@ -1084,7 +1065,6 @@ std::future<__async_result_of<Function, Args...> >
     bound->ptr = state_ptr;
   }
   assert(state_ptr != nullptr);
-  //future<result_type> result { state_ptr };
   return future<result_type> { state_ptr };
 }
 

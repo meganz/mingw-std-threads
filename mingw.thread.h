@@ -132,13 +132,13 @@ namespace detail
     using std::invoke;
 #endif
 
-    template<int...>
+    template<std::size_t...>
     struct IntSeq {};
 
-    template<int N, int... S>
+    template<std::size_t N, std::size_t... S>
     struct GenIntSeq : GenIntSeq<N-1, N-1, S...> { };
 
-    template<int... S>
+    template<std::size_t... S>
     struct GenIntSeq<0, S...> { typedef IntSeq<S...> type; };
 
     // We can't define the Call struct in the function - the standard forbids template methods in that case
@@ -149,7 +149,7 @@ namespace detail
         Func mFunc;
         Tuple mArgs;
 
-        template <int... S>
+        template <std::size_t... S>
         void callFunc(detail::IntSeq<S...>)
         {
             detail::invoke(std::forward<Func>(mFunc), std::get<S>(std::forward<Tuple>(mArgs)) ...);
@@ -160,7 +160,7 @@ namespace detail
 
         void callFunc()
         {
-            callFunc(typename detail::GenIntSeq<static_cast<int>(sizeof...(Args))>::type());
+            callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
         }
     };
 
@@ -330,14 +330,13 @@ namespace this_thread
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
-        std::chrono::milliseconds::rep ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>
-            (sleep_duration).count();
+        using namespace std::chrono;
+        using rep = milliseconds::rep;
+        rep ms = duration_cast<milliseconds>(sleep_duration).count();
         while (ms > 0)
         {
-            DWORD sleepTime = std::min(ms, static_cast<std::chrono::milliseconds::rep>(
-                INFINITE - 1));
-            Sleep(sleepTime);
+            auto sleepTime = std::min(ms, static_cast<rep>(INFINITE - 1));
+            Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;
         }
     }

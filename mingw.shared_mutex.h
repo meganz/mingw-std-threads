@@ -32,16 +32,6 @@
 #endif
 
 #include <cassert>
-
-//    Use MinGW's shared_lock class template, if it's available. Requires C++14.
-//  If unavailable (eg. because this library is being used in C++11), then an
-//  implementation of shared_lock is provided by this header.
-#if (__cplusplus >= 201402L)
-#include <shared_mutex>
-#endif
-//  For defer_lock_t, adopt_lock_t, and try_to_lock_t
-#include "mingw.mutex.h"
-
 //  For descriptive errors.
 #include <system_error>
 //    Implementing a shared_mutex without OS support will require atomic read-
@@ -50,6 +40,15 @@
 //  For timing in shared_lock and shared_timed_mutex.
 #include <chrono>
 
+//    Use MinGW's shared_lock class template, if it's available. Requires C++14.
+//  If unavailable (eg. because this library is being used in C++11), then an
+//  implementation of shared_lock is provided by this header.
+#if (__cplusplus >= 201402L)
+#include <shared_mutex>
+#endif
+
+//  For defer_lock_t, adopt_lock_t, and try_to_lock_t
+#include "mingw.mutex.h"
 //  For this_thread::yield.
 #include "mingw.thread.h"
 
@@ -66,23 +65,17 @@ namespace portable
 class shared_mutex
 {
     typedef uint_fast16_t counter_type;
-    std::atomic<counter_type> mCounter;
+    std::atomic<counter_type> mCounter {0};
     static constexpr counter_type kWriteBit = 1 << (sizeof(counter_type) * CHAR_BIT - 1);
 
 #if STDMUTEX_RECURSION_CHECKS
 //  Runtime checker for verifying owner threads. Note: Exclusive mode only.
-    _OwnerThread mOwnerThread;
+    _OwnerThread mOwnerThread {};
 #endif
 public:
     typedef shared_mutex * native_handle_type;
 
-    shared_mutex ()
-        : mCounter(0)
-#if STDMUTEX_RECURSION_CHECKS
-        , mOwnerThread()
-#endif
-    {
-    }
+    shared_mutex () = default;
 
 //  No form of copying or moving should be allowed.
     shared_mutex (const shared_mutex&) = delete;
@@ -119,7 +112,7 @@ public:
 
     bool try_lock_shared (void)
     {
-        counter_type expected = static_cast<counter_type>(mCounter.load(std::memory_order_relaxed) & (~kWriteBit));
+        counter_type expected = mCounter.load(std::memory_order_relaxed) & static_cast<counter_type>(~kWriteBit);
         if (expected + 1 == kWriteBit)
             return false;
         else
@@ -133,7 +126,7 @@ public:
     {
         using namespace std;
 #ifndef NDEBUG
-        if (!(mCounter.fetch_sub(1, memory_order_release) & (~kWriteBit)))
+        if (!(mCounter.fetch_sub(1, memory_order_release) & static_cast<counter_type>(~kWriteBit)))
             throw system_error(make_error_code(errc::operation_not_permitted));
 #else
         mCounter.fetch_sub(1, memory_order_release);
