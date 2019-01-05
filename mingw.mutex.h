@@ -287,8 +287,8 @@ class recursive_timed_mutex
         assert(ms != INFINITE);
         return (WaitForSingleObject(mHandle, ms) == WAIT_OBJECT_0);
     }
-    HANDLE mHandle;
 protected:
+    HANDLE mHandle;
 //    Track locking thread for error checking of non-recursive timed_mutex. For
 //  standard compliance, this must be defined in same class and at the same
 //  access-control level as every other variable in the timed_mutex.
