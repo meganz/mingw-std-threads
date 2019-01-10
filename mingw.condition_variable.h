@@ -50,10 +50,10 @@ namespace xp
 #if (WINVER < _WIN32_WINNT_VISTA)
 class condition_variable_any
 {
-    recursive_mutex mMutex;
-    std::atomic<int> mNumWaiters;
+    recursive_mutex mMutex {};
+    std::atomic<int> mNumWaiters {0};
     HANDLE mSemaphore;
-    HANDLE mWakeEvent;
+    HANDLE mWakeEvent {};
 public:
     using native_handle_type = HANDLE;
     native_handle_type native_handle()
@@ -63,10 +63,17 @@ public:
     condition_variable_any(const condition_variable_any&) = delete;
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any()
-        :mMutex(), mNumWaiters(0),
-         mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL)),
-         mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL))
-    {}
+        :   mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL))
+    {
+        if (mSemaphore == NULL)
+            throw std::system_error(GetLastError(), std::generic_category());
+        mWakeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+        if (mWakeEvent == NULL)
+        {
+            CloseHandle(mSemaphore);
+            throw std::system_error(GetLastError(), std::generic_category());
+        }
+    }
     ~condition_variable_any()
     {
         CloseHandle(mWakeEvent);
