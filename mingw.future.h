@@ -23,10 +23,14 @@
 
 #include <cassert>
 #include <vector>
-#include <utility>  //  For std::pair
+#include <utility>        //  For std::pair
 #include <type_traits>
 #include <memory>
-#include "mingw.thread.h"
+#include <functional>     //  For std::hash
+
+#include "mingw.thread.h" //  For invoke implementation
+
+//  Mutexes and condition variables are used explicitly.
 #include "mingw.mutex.h"
 #include "mingw.condition_variable.h"
 
@@ -914,7 +918,7 @@ struct StorageHelper
   static void store_deferred (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
   {
     try {
-      state_ptr->set_value(mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...));
+      state_ptr->set_value(invoke(std::forward<Func>(func), std::forward<Args>(args)...));
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
     }
@@ -938,7 +942,7 @@ struct StorageHelper<Ref&>
   {
     try {
       typedef typename std::remove_cv<Ref>::type Ref_non_cv;
-      Ref & rf = mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
+      Ref & rf = invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
     } catch (...) {
       state_ptr->set_exception(std::current_exception());
@@ -962,8 +966,7 @@ struct StorageHelper<void>
   static void store_deferred (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
   {
     try {
-      //std::forward<Func>(func)(std::forward<Args>(args)...);
-      mingw_stdthread::detail::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
+      invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(Empty{});
     } catch (...) {
       state_ptr->set_exception(std::current_exception());

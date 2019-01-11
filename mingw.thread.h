@@ -27,18 +27,18 @@
 //  Use the standard classes for std::, if available.
 #include <thread>
 
-#include <windows.h>
 #include <functional>
 #include <memory>
 #include <chrono>
 #include <system_error>
 #include <cerrno>
 #include <ostream>
-#include <process.h>
-#include <ostream>
 #include <type_traits>
 #include <limits>
 #include <algorithm>
+
+#include <windows.h>
+#include <process.h>  //  For beginthread
 
 #ifndef NDEBUG
 #include <cstdio>
@@ -241,8 +241,6 @@ public:
         auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
             static_cast<LPVOID>(call), 0,
             reinterpret_cast<unsigned*>(&(mThreadId.mId)));
-        /*mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
-            (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));*/
         if (int_handle == 0)
         {
             mHandle = kInvalidHandle;
