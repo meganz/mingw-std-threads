@@ -28,7 +28,7 @@
 #include <memory>
 #include <functional>     //  For std::hash
 
-#include "mingw.thread.h" //  For invoke implementation
+#include "mingw.thread.h" //  Start new threads, and use invoke.
 
 //  Mutexes and condition variables are used explicitly.
 #include "mingw.mutex.h"
@@ -427,7 +427,7 @@ class shared_future : future<T>
   }
 
   shared_future (shared_future<T> const & source) noexcept(__cplusplus >= 201703L)
-    : future<T>(source.mState)
+    : future<T>(static_cast<state_type *>(source.mState))
   {
     future<T>::mState->increment_references();
   }
@@ -851,10 +851,21 @@ class shared_future<void> : shared_future<mingw_stdthread::detail::Empty>
   ~shared_future (void) = default;
 };
 
+inline shared_future<void> future<void>::share (void) noexcept
+{
+  return shared_future<void>(std::move(*this));
+}
+
 template<class T>
 shared_future<T> future<T>::share (void) noexcept
 {
-  return shared_future<void>(std::move(*this));
+  return shared_future<T>(std::move(*this));
+}
+
+template<class T>
+shared_future<T&> future<T&>::share (void) noexcept
+{
+  return shared_future<T&>(std::move(*this));
 }
 
 template<>
