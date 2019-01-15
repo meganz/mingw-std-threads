@@ -27,11 +27,15 @@
 //  Use the standard classes for std::, if available.
 #include <condition_variable>
 
-#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <system_error>
 #include <windows.h>
+
+#if (WINVER < _WIN32_WINNT_VISTA)
+#include <atomic>
+#endif
+
 #include "mingw.mutex.h"
 #include "mingw.shared_mutex.h"
 
