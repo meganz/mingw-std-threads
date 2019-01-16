@@ -27,24 +27,31 @@
 //  Use the standard classes for std::, if available.
 #include <thread>
 
-#include <functional>
-#include <memory>
-#include <chrono>
-#include <system_error>
-#include <cerrno>
-#include <ostream>
-#include <type_traits>
-#include <limits>
-#include <algorithm>
+#include <cstddef>      //  For std::size_t
+#include <cerrno>       //  Detect error type.
+#include <exception>    //  For std::terminate
+#include <system_error> //  For std::system_error
+#include <functional>   //  For std::hash
+#include <tuple>        //  For std::tuple
+#include <chrono>       //  For sleep timing.
+#include <memory>       //  For std::unique_ptr
+#include <ostream>      //  Stream output for thread ids.
+#include <utility>      //  For std::swap, std::forward
+#include <algorithm>    //  For std::min
+
+//  For the invoke implementation only:
+#include <type_traits>  //  For std::result_of, etc.
+//#include <utility>      //  For std::forward
+//#include <functional>   //  For std::reference_wrapper
 
 #include <windows.h>
-#include <process.h>  //  For beginthread
+#include <process.h>  //  For _beginthreadex
 
 #ifndef NDEBUG
 #include <cstdio>
 #endif
 
-//instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
+//  Instead of INVALID_HANDLE_VALUE, _beginthreadex returns 0.
 namespace mingw_stdthread
 {
 namespace detail
@@ -164,7 +171,7 @@ namespace detail
         }
     };
 
-}
+} //  Namespace "detail"
 
 class thread
 {
