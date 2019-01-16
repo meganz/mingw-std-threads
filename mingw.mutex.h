@@ -38,7 +38,6 @@
 #include <system_error>
 #include <atomic>
 #include <mutex> //need for call_once()
-#include <algorithm>  //  For std::min
 
 #if STDMUTEX_RECURSION_CHECKS
 #include <cstdio>
@@ -335,7 +334,8 @@ public:
         auto timeout = duration_cast<milliseconds>(dur).count();
         while (timeout > 0)
         {
-          auto step = std::min(timeout, static_cast<decltype(timeout)>(INFINITE - 1));
+          constexpr auto kMaxStep = static_cast<decltype(timeout)>(INFINITE-1);
+          auto step = (timeout < kMaxStep) ? timeout : kMaxStep;
           if (try_lock_internal(static_cast<DWORD>(step)))
             return true;
           timeout -= step;

@@ -37,7 +37,6 @@
 #include <memory>       //  For std::unique_ptr
 #include <ostream>      //  Stream output for thread ids.
 #include <utility>      //  For std::swap, std::forward
-#include <algorithm>    //  For std::min
 
 //  For the invoke implementation only:
 #include <type_traits>  //  For std::result_of, etc.
@@ -340,7 +339,8 @@ namespace this_thread
         rep ms = duration_cast<milliseconds>(sleep_duration).count();
         while (ms > 0)
         {
-            auto sleepTime = std::min(ms, static_cast<rep>(INFINITE - 1));
+            constexpr rep kMaxRep = static_cast<rep>(INFINITE - 1);
+            auto sleepTime = (ms < kMaxRep) ? ms : kMaxRep;
             Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;
         }
