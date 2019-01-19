@@ -27,24 +27,30 @@
 //  Use the standard classes for std::, if available.
 #include <thread>
 
+#include <cstddef>      //  For std::size_t
+#include <cerrno>       //  Detect error type.
+#include <exception>    //  For std::terminate
+#include <system_error> //  For std::system_error
+#include <functional>   //  For std::hash
+#include <tuple>        //  For std::tuple
+#include <chrono>       //  For sleep timing.
+#include <memory>       //  For std::unique_ptr
+#include <ostream>      //  Stream output for thread ids.
+#include <utility>      //  For std::swap, std::forward
+
+//  For the invoke implementation only:
+#include <type_traits>  //  For std::result_of, etc.
+//#include <utility>      //  For std::forward
+//#include <functional>   //  For std::reference_wrapper
+
 #include <windows.h>
-#include <functional>
-#include <memory>
-#include <chrono>
-#include <system_error>
-#include <cerrno>
-#include <ostream>
-#include <process.h>
-#include <ostream>
-#include <type_traits>
-#include <limits>
-#include <algorithm>
+#include <process.h>  //  For _beginthreadex
 
 #ifndef NDEBUG
 #include <cstdio>
 #endif
 
-//instead of INVALID_HANDLE_VALUE _beginthreadex returns 0
+//  Instead of INVALID_HANDLE_VALUE, _beginthreadex returns 0.
 namespace mingw_stdthread
 {
 namespace detail
@@ -164,7 +170,7 @@ namespace detail
         }
     };
 
-}
+} //  Namespace "detail"
 
 class thread
 {
@@ -241,8 +247,6 @@ public:
         auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
             static_cast<LPVOID>(call), 0,
             reinterpret_cast<unsigned*>(&(mThreadId.mId)));
-        /*mHandle = (HANDLE)_beginthreadex(NULL, 0, threadfunc<Call>,
-            (LPVOID)call, 0, (unsigned*)&(mThreadId.mId));*/
         if (int_handle == 0)
         {
             mHandle = kInvalidHandle;
@@ -335,7 +339,8 @@ namespace this_thread
         rep ms = duration_cast<milliseconds>(sleep_duration).count();
         while (ms > 0)
         {
-            auto sleepTime = std::min(ms, static_cast<rep>(INFINITE - 1));
+            constexpr rep kMaxRep = static_cast<rep>(INFINITE - 1);
+            auto sleepTime = (ms < kMaxRep) ? ms : kMaxRep;
             Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;
         }

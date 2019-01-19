@@ -34,16 +34,18 @@
 #define STDMUTEX_RECURSION_CHECKS 1
 #endif
 
-#include <windows.h>
 #include <chrono>
 #include <system_error>
-#include <cstdio>
 #include <atomic>
 #include <mutex> //need for call_once()
-#include <cassert>
-#include <algorithm>  //  For std::min
 
-//  Need for yield in spinlock and the implementation of invoke
+#if STDMUTEX_RECURSION_CHECKS
+#include <cstdio>
+#endif
+
+#include <windows.h>
+
+//  Need for the implementation of invoke
 #include "mingw.thread.h"
 
 namespace mingw_stdthread
@@ -228,7 +230,7 @@ public:
             }
             if (state == 1)
             {
-                this_thread::yield();
+                Sleep(0);
                 state = mState.load(std::memory_order_acquire);
             }
         }
@@ -242,7 +244,6 @@ public:
     }
     void unlock (void)
     {
-        assert(mState.load(std::memory_order_relaxed) == 0);
 #if STDMUTEX_RECURSION_CHECKS
         mOwnerThread.checkSetOwnerBeforeUnlock();
 #endif
@@ -282,13 +283,12 @@ using xp::mutex;
 
 class recursive_timed_mutex
 {
-    inline bool try_lock_internal (DWORD ms)
+    inline bool try_lock_internal (DWORD ms) noexcept
     {
-        assert(ms != INFINITE);
         return (WaitForSingleObject(mHandle, ms) == WAIT_OBJECT_0);
     }
-    HANDLE mHandle;
 protected:
+    HANDLE mHandle;
 //    Track locking thread for error checking of non-recursive timed_mutex. For
 //  standard compliance, this must be defined in same class and at the same
 //  access-control level as every other variable in the timed_mutex.
@@ -334,7 +334,8 @@ public:
         auto timeout = duration_cast<milliseconds>(dur).count();
         while (timeout > 0)
         {
-          auto step = std::min(timeout, static_cast<decltype(timeout)>(INFINITE - 1));
+          constexpr auto kMaxStep = static_cast<decltype(timeout)>(INFINITE-1);
+          auto step = (timeout < kMaxStep) ? timeout : kMaxStep;
           if (try_lock_internal(static_cast<DWORD>(step)))
             return true;
           timeout -= step;

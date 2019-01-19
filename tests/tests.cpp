@@ -7,6 +7,7 @@
 #include <cassert>
 #include <string>
 #include <iostream>
+#include <typeinfo>
 #include <windows.h>
 
 using namespace std;
@@ -242,20 +243,36 @@ void test_future ()
   test_future_get_value(async_member);
 }
 
+#define TEST_SL_MV_CPY(ClassName) if (!std::is_standard_layout<ClassName>::value) \
+    LOG("WARNING: Class %s does not satisfy concept StandardLayoutType.","ClassName"); \
+    static_assert(!std::is_move_constructible<ClassName>::value, \
+                  "ClassName must not be move-constructible."); \
+    static_assert(!std::is_move_assignable<ClassName>::value, \
+                  "ClassName must not be move-assignable."); \
+    static_assert(!std::is_copy_constructible<ClassName>::value, \
+                  "ClassName must not be copy-constructible."); \
+    static_assert(!std::is_copy_assignable<ClassName>::value, \
+                  "ClassName must not be copy-assignable.");
+
 int main()
 {
-    if (!is_standard_layout<mutex>::value)
-      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","mutex");
-    if (!is_standard_layout<recursive_mutex>::value)
-      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","recursive_mutex");
-    if (!is_standard_layout<timed_mutex>::value)
-      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","timed_mutex");
-    if (!is_standard_layout<recursive_timed_mutex>::value)
-      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","recursive_timed_mutex");
-    if (!is_standard_layout<shared_mutex>::value)
-      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","shared_mutex");
-    if (!is_standard_layout<shared_timed_mutex>::value)
-      LOG("WARNING: Class std::%s does not satisfy concept StandardLayoutType.","shared_timed_mutex");
+    TEST_SL_MV_CPY(mutex)
+    TEST_SL_MV_CPY(recursive_mutex)
+    TEST_SL_MV_CPY(timed_mutex)
+    TEST_SL_MV_CPY(recursive_timed_mutex)
+    TEST_SL_MV_CPY(shared_mutex)
+    TEST_SL_MV_CPY(shared_timed_mutex)
+    TEST_SL_MV_CPY(condition_variable)
+    TEST_SL_MV_CPY(condition_variable_any)
+    static_assert(!std::is_move_constructible<once_flag>::value,
+                  "once_flag must not be move-constructible.");
+    static_assert(!std::is_move_assignable<once_flag>::value,
+                  "once_flag must not be move-assignable.");
+    static_assert(!std::is_copy_constructible<once_flag>::value,
+                  "once_flag must not be copy-constructible.");
+    static_assert(!std::is_copy_assignable<once_flag>::value,
+                  "once_flag must not be copy-assignable.");
+
 //    With C++ feature level and target Windows version potentially affecting
 //  behavior, make this information visible.
     {
