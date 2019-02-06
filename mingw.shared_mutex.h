@@ -55,6 +55,10 @@
 //  Might be able to use native Slim Reader-Writer (SRW) locks.
 #ifdef _WIN32
 #include <windows.h>
+
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
+#endif
 #endif
 
 namespace mingw_stdthread
