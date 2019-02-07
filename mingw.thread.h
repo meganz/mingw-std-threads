@@ -50,6 +50,10 @@
 #include <cstdio>
 #endif
 
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
+#endif
+
 //  Instead of INVALID_HANDLE_VALUE, _beginthreadex returns 0.
 namespace mingw_stdthread
 {
@@ -220,7 +224,14 @@ private:
     static unsigned int _hardware_concurrency_helper() noexcept
     {
         SYSTEM_INFO sysinfo;
+//    This is one of the few functions used by the library which has a nearly-
+//  equivalent function defined in earlier versions of Windows. Include the
+//  workaround, just as a reminder that it does exist.
+#if defined(_WIN32_WINNT) && (_WIN32_WINNT >= 0x0501)
         ::GetNativeSystemInfo(&sysinfo);
+#else
+        ::GetSystemInfo(&sysinfo);
+#endif
         return sysinfo.dwNumberOfProcessors;
     }
 public:
@@ -259,6 +270,11 @@ public:
     }
 
     bool joinable() const {return mHandle != kInvalidHandle;}
+
+//    Note: Due to lack of synchronization, this function has a race condition
+//  if called concurrently, which leads to undefined behavior. The same applies
+//  to all other member functions of this class, but this one is mentioned
+//  explicitly.
     void join()
     {
         using namespace std;

@@ -48,6 +48,10 @@
 //  Need for the implementation of invoke
 #include "mingw.thread.h"
 
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
+#endif
+
 namespace mingw_stdthread
 {
 //    The _NonRecursive class has mechanisms that do not play nice with direct
@@ -161,6 +165,7 @@ public:
     mutex & operator= (const mutex&) = delete;
     void lock (void)
     {
+//  Note: Undefined behavior if called recursively.
 #if STDMUTEX_RECURSION_CHECKS
         DWORD self = mOwnerThread.checkOwnerBeforeLock();
 #endif
@@ -216,6 +221,9 @@ public:
     mutex & operator= (const mutex&) = delete;
     ~mutex() noexcept
     {
+//    Undefined behavior if the mutex is held (locked) by any thread.
+//    Undefined behavior if a thread terminates while holding ownership of the
+//  mutex.
         DeleteCriticalSection(&mHandle);
     }
     void lock (void)

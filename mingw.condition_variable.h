@@ -39,6 +39,10 @@
 #include "mingw.mutex.h"
 #include "mingw.shared_mutex.h"
 
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
+#endif
+
 namespace mingw_stdthread
 {
 #if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
@@ -280,7 +284,8 @@ class condition_variable
 
     bool wait_impl (unique_lock<xp::mutex> & lock, DWORD time)
     {
-        static_assert(std::is_same<typename xp::mutex::native_handle_type, PCRITICAL_SECTION>::value,
+        using mutex_handle_type = typename xp::mutex::native_handle_type;
+        static_assert(std::is_same<mutex_handle_type, PCRITICAL_SECTION>::value,
                       "Native Win32 condition variable requires std::mutex to \
 use native Win32 critical section objects.");
         xp::mutex * pmutex = lock.release();
@@ -298,7 +303,13 @@ use native Win32 critical section objects.");
         before_wait(pmutex);
         BOOL success = SleepConditionVariableSRW( native_handle(),
                                                   pmutex->native_handle(),
-                                                  time, 0);
+                                                  time,
+//    CONDITION_VARIABLE_LOCKMODE_SHARED has a value not specified by
+//  Microsoft's Dev Center, but is known to be (convertible to) a ULONG. To
+//  ensure that the value passed to this function is not equal to Microsoft's
+//  constant, we can either use a static_assert, or simply generate an
+//  appropriate value.
+                                           !CONDITION_VARIABLE_LOCKMODE_SHARED);
         after_wait(pmutex);
         return success;
     }
@@ -414,10 +425,6 @@ class condition_variable_any
 //    Some shared_mutex functionality is available even in Vista, but it's not
 //  until Windows 7 that a full implementation is natively possible. The class
 //  itself is defined, with missing features, at the Vista feature level.
-    static_assert(CONDITION_VARIABLE_LOCKMODE_SHARED != 0, "The flag \
-CONDITION_VARIABLE_LOCKMODE_SHARED is not defined as expected. The value for \
-exclusive mode is unknown (not specified by Microsoft Dev Center), but assumed \
-to be 0. There is a conflict with CONDITION_VARIABLE_LOCKMODE_SHARED.");
     bool wait_impl (unique_lock<native_shared_mutex> & lock, DWORD time)
     {
         native_shared_mutex * pmutex = lock.release();
