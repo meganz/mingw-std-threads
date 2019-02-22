@@ -39,6 +39,7 @@
 #include <atomic>
 //  For timing in shared_lock and shared_timed_mutex.
 #include <chrono>
+#include <limits>
 
 //    Use MinGW's shared_lock class template, if it's available. Requires C++14.
 //  If unavailable (eg. because this library is being used in C++11), then an
@@ -66,7 +67,7 @@ class shared_mutex
 {
     typedef uint_fast16_t counter_type;
     std::atomic<counter_type> mCounter {0};
-    static constexpr counter_type kWriteBit = 1 << (sizeof(counter_type) * CHAR_BIT - 1);
+    static constexpr counter_type kWriteBit = 1 << (std::numeric_limits<counter_type>::digits - 1);
 
 #if STDMUTEX_RECURSION_CHECKS
 //  Runtime checker for verifying owner threads. Note: Exclusive mode only.
