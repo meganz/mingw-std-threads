@@ -39,7 +39,7 @@
 #include <atomic>
 #include <mutex> //need for call_once()
 
-#if STDMUTEX_RECURSION_CHECKS
+#if STDMUTEX_RECURSION_CHECKS || !defined(NDEBUG)
 #include <cstdio>
 #endif
 
@@ -293,7 +293,16 @@ class recursive_timed_mutex
 {
     inline bool try_lock_internal (DWORD ms) noexcept
     {
-        return (WaitForSingleObject(mHandle, ms) == WAIT_OBJECT_0);
+        DWORD ret = WaitForSingleObject(mHandle, ms);
+#ifndef NDEBUG
+        if (ret == WAIT_ABANDONED)
+        {
+            using namespace std;
+            fprintf(stderr, "FATAL: Thread terminated while holding a mutex.");
+            terminate();
+        }
+#endif
+        return (ret == WAIT_OBJECT_0) || (ret == WAIT_ABANDONED);
     }
 protected:
     HANDLE mHandle;
@@ -317,19 +326,26 @@ public:
     void lock()
     {
         DWORD ret = WaitForSingleObject(mHandle, INFINITE);
-        if (ret != WAIT_OBJECT_0)
+//    If (ret == WAIT_ABANDONED), then the thread that held ownership was
+//  terminated. Behavior is undefined, but Windows will pass ownership to this
+//  thread.
+#ifndef NDEBUG
+        if (ret == WAIT_ABANDONED)
         {
             using namespace std;
-            throw system_error(make_error_code((ret == WAIT_ABANDONED) ?
-                                                  errc::owner_dead :
-                                                  errc::protocol_error));
+            fprintf(stderr, "FATAL: Thread terminated while holding a mutex.");
+            terminate();
+        }
+#endif
+        if ((ret != WAIT_OBJECT_0) && (ret != WAIT_ABANDONED))
+        {
+            throw std::system_error(GetLastError(), std::system_category());
         }
     }
     void unlock()
     {
-        using namespace std;
         if (!ReleaseMutex(mHandle))
-            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+            throw std::system_error(GetLastError(), std::system_category());
     }
     bool try_lock()
     {
