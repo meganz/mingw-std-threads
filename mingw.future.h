@@ -20,7 +20,7 @@
 #endif
 
 #include <future>
-#include <c++/bits/exception_defines.h>
+#include <bits/exception_defines.h>
 #include <cassert>
 #include <vector>
 #include <utility>        //  For std::pair

@@ -26,7 +26,7 @@
 #endif
 //  Use the standard classes for std::, if available.
 #include <condition_variable>
-#include <c++/bits/exception_defines.h>
+#include <bits/exception_defines.h>
 #include <cassert>
 #include <chrono>
 #include <system_error>

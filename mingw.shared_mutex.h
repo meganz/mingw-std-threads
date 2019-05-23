@@ -31,7 +31,7 @@
 #error A C++11 compiler is required!
 #endif
 
-#include <c++/bits/exception_defines.h>
+#include <bits/exception_defines.h>
 #include <cassert>
 //  For descriptive errors.
 #include <system_error>

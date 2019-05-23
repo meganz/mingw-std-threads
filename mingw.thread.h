@@ -26,7 +26,7 @@
 
 //  Use the standard classes for std::, if available.
 #include <thread>
-#include <c++/bits/exception_defines.h>
+#include <bits/exception_defines.h>
 #include <cstddef>      //  For std::size_t
 #include <cerrno>       //  Detect error type.
 #include <exception>    //  For std::terminate

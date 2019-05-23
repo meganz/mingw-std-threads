@@ -34,7 +34,7 @@
 #define STDMUTEX_RECURSION_CHECKS 1
 #endif
 
-#include <c++/bits/exception_defines.h>
+#include <bits/exception_defines.h>
 #include <chrono>
 #include <system_error>
 #include <atomic>
