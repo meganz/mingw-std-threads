@@ -34,6 +34,7 @@
 #define STDMUTEX_RECURSION_CHECKS 1
 #endif
 
+#include <c++/bits/exception_defines.h>
 #include <chrono>
 #include <system_error>
 #include <atomic>
@@ -118,7 +119,7 @@ struct _OwnerThread
         fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex\
  detected. Throwing system exception\n");
         fflush(stderr);
-        throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+        __throw_exception_again system_error(make_error_code(errc::resource_deadlock_would_occur));
     }
     DWORD checkOwnerBeforeLock() const
     {
@@ -339,13 +340,13 @@ public:
 #endif
         if ((ret != WAIT_OBJECT_0) && (ret != WAIT_ABANDONED))
         {
-            throw std::system_error(GetLastError(), std::system_category());
+            __throw_exception_again std::system_error(GetLastError(), std::system_category());
         }
     }
     void unlock()
     {
         if (!ReleaseMutex(mHandle))
-            throw std::system_error(GetLastError(), std::system_category());
+            __throw_exception_again std::system_error(GetLastError(), std::system_category());
     }
     bool try_lock()
     {

@@ -26,7 +26,7 @@
 #endif
 //  Use the standard classes for std::, if available.
 #include <condition_variable>
-
+#include <c++/bits/exception_defines.h>
 #include <cassert>
 #include <chrono>
 #include <system_error>
@@ -74,12 +74,12 @@ public:
         :   mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL))
     {
         if (mSemaphore == NULL)
-            throw std::system_error(GetLastError(), std::generic_category());
+            __throw_exception_again std::system_error(GetLastError(), std::generic_category());
         mWakeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
         if (mWakeEvent == NULL)
         {
             CloseHandle(mSemaphore);
-            throw std::system_error(GetLastError(), std::generic_category());
+            __throw_exception_again std::system_error(GetLastError(), std::generic_category());
         }
     }
     ~condition_variable_any()
@@ -119,8 +119,9 @@ private:
         else
         {
             using namespace std;
-            throw system_error(make_error_code(errc::protocol_error));
+            __throw_exception_again system_error(make_error_code(errc::protocol_error));
         }
+		return false;
     }
 public:
     template <class M>

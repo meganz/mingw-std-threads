@@ -26,7 +26,7 @@
 
 //  Use the standard classes for std::, if available.
 #include <thread>
-
+#include <c++/bits/exception_defines.h>
 #include <cstddef>      //  For std::size_t
 #include <cerrno>       //  Detect error type.
 #include <exception>    //  For std::terminate
@@ -263,8 +263,8 @@ public:
             mHandle = kInvalidHandle;
             int errnum = errno;
             delete call;
-//  Note: Should only throw EINVAL, EAGAIN, EACCES
-            throw std::system_error(errnum, std::generic_category());
+//  Note: Should only __throw_exception_again EINVAL, EAGAIN, EACCES
+            __throw_exception_again std::system_error(errnum, std::generic_category());
         } else
             mHandle = reinterpret_cast<HANDLE>(int_handle);
     }
@@ -279,11 +279,11 @@ public:
     {
         using namespace std;
         if (get_id() == id(GetCurrentThreadId()))
-            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+            __throw_exception_again system_error(make_error_code(errc::resource_deadlock_would_occur));
         if (mHandle == kInvalidHandle)
-            throw system_error(make_error_code(errc::no_such_process));
+            __throw_exception_again system_error(make_error_code(errc::no_such_process));
         if (!joinable())
-            throw system_error(make_error_code(errc::invalid_argument));
+            __throw_exception_again system_error(make_error_code(errc::invalid_argument));
         WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
@@ -332,7 +332,7 @@ moving another thread to it.\n");
         if (!joinable())
         {
             using namespace std;
-            throw system_error(make_error_code(errc::invalid_argument));
+            __throw_exception_again system_error(make_error_code(errc::invalid_argument));
         }
         if (mHandle != kInvalidHandle)
         {
