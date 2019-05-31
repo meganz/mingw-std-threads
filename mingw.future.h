@@ -33,6 +33,7 @@
 //  Mutexes and condition variables are used explicitly.
 #include "mingw.mutex.h"
 #include "mingw.condition_variable.h"
+#include "mingw.throw.h"
 
 //  Note:
 //    std::shared_ptr is the natural choice for this. However, a custom
@@ -173,7 +174,7 @@ struct FutureBase : public FutureStatic<true>
   {
 #if !defined(NDEBUG)
     if (!valid())
-      __throw_future_error(future_errc::no_state);
+      mingw_throw_future_error(future_errc::no_state);
 #endif
 //    If there's already a value or exception, don't do any extraneous
 //  synchronization. The `get()` method will do that for us.
@@ -189,7 +190,7 @@ struct FutureBase : public FutureStatic<true>
   {
 #if !defined(NDEBUG)
     if (!valid())
-      __throw_future_error(future_errc::no_state);
+      mingw_throw_future_error(future_errc::no_state);
 #endif
     auto current_state = mState->mType.load(std::memory_order_relaxed);
     if (current_state & kReadyFlag)
@@ -464,9 +465,9 @@ class promise : mingw_stdthread::detail::FutureBase
   void check_before_set (void) const
   {
     if (!valid())
-      __throw_future_error(future_errc::no_state);
+      mingw_throw_future_error(future_errc::no_state);
     if (mState->mType.load(std::memory_order_relaxed) & kSetFlag)
-      __throw_future_error(future_errc::promise_already_satisfied);
+      mingw_throw_future_error(future_errc::promise_already_satisfied);
   }
 
   void check_abandon (void)
@@ -474,7 +475,7 @@ class promise : mingw_stdthread::detail::FutureBase
     if (valid() && !(mState->mType.load(std::memory_order_relaxed) & kSetFlag))
     {
       try {
-        __throw_future_error(future_errc::broken_promise);
+        mingw_throw_future_error(future_errc::broken_promise);
       } catch (...) {
         set_exception(std::current_exception());
       }
@@ -494,7 +495,7 @@ class promise : mingw_stdthread::detail::FutureBase
                                    FALSE, //  No need for this to be inherited.
                                    DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
     if (!success)
-      __throw_runtime_error("MinGW STD Threads library failed to make a promise ready after thread exit.");
+      mingw_throw_runtime_error("MinGW STD Threads library failed to make a promise ready after thread exit.");
 
     mState->increment_references();
     bool handle_handled = false;
@@ -542,9 +543,9 @@ class promise : mingw_stdthread::detail::FutureBase
   future<U> make_future (void)
   {
     if (!valid())
-      __throw_future_error(future_errc::no_state);
+      mingw_throw_future_error(future_errc::no_state);
     if (mRetrieved)
-      __throw_future_error(future_errc::future_already_retrieved);
+      mingw_throw_future_error(future_errc::future_already_retrieved);
     mState->increment_references();
     mRetrieved = true;
     return future<U>(static_cast<state_type *>(mState));

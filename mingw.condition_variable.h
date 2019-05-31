@@ -38,6 +38,7 @@
 
 #include "mingw.mutex.h"
 #include "mingw.shared_mutex.h"
+#include "mingw.throw.h"
 
 #if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
 #error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
@@ -74,12 +75,12 @@ public:
         :   mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL))
     {
         if (mSemaphore == NULL)
-            std::__throw_system_error(GetLastError());
+            mingw_throw_system_error_arg(GetLastError(), std::generic_category());
         mWakeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
         if (mWakeEvent == NULL)
         {
             CloseHandle(mSemaphore);
-            std::__throw_system_error(GetLastError());
+            mingw_throw_system_error_arg(GetLastError(), std::generic_category());
         }
     }
     ~condition_variable_any()
@@ -119,7 +120,7 @@ private:
         else
         {
             using namespace std;
-            std::__throw_system_error(int(errc::protocol_error));
+            mingw_throw_system_error(mingw_make_error_code(errc::protocol_error));
         }
 		return false;
     }

@@ -48,6 +48,7 @@
 
 //  Need for the implementation of invoke
 #include "mingw.thread.h"
+#include "mingw.throw.h"
 
 #if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
 #error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
@@ -119,7 +120,7 @@ struct _OwnerThread
         fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex\
  detected. Throwing system exception\n");
         fflush(stderr);
-        std::__throw_system_error(int(errc::resource_deadlock_would_occur));
+        mingw_throw_system_error(mingw_make_error_code(errc::resource_deadlock_would_occur));
     }
     DWORD checkOwnerBeforeLock() const
     {
@@ -340,13 +341,13 @@ public:
 #endif
         if ((ret != WAIT_OBJECT_0) && (ret != WAIT_ABANDONED))
         {
-            std::__throw_system_error(GetLastError());
+            mingw_throw_system_error_arg(GetLastError(), std::system_category());
         }
     }
     void unlock()
     {
         if (!ReleaseMutex(mHandle))
-            std::__throw_system_error(GetLastError());
+            mingw_throw_system_error_arg(GetLastError(), std::system_category());
     }
     bool try_lock()
     {
