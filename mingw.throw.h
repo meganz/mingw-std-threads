@@ -23,33 +23,36 @@
 #if !defined(__cplusplus) || (__cplusplus < 201103L)
 #error A C++11 compiler is required!
 #endif
-	
+
 // (Multi args version)
 //#define mingw_throw_multi(_1,_2,NAME,...) NAME
 //#define mingw_throw_system_error(...) mingw_throw_multi(__VA_ARGS__,  mingw_throw_system_error2, mingw_throw_system_error1)(__VA_ARGS__)
 
-	
-#ifdef __cpp_exceptions
+//    Disabling exceptions is very much non-standard behavior. Though C++20 may
+//  add a feature-test macro, earlier versions do not provide such a mechanism.
+//  Instead, appropriate compiler-specific macros must be checked.
+#if (defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)) || \
+  defined(__EXCEPTIONS) || (!defined(__clang__) && !defined(__GNUC__))
 
 	#define mingw_make_error_code(err) 			     std::make_error_code(err)
 
 	#define mingw_throw_system_error(err)   	     throw std::system_error(err)
 	#define mingw_throw_system_error_arg(err, arg)   throw std::system_error(err, arg)
-	
+
 	#define mingw_throw_future_error(err)   	     throw std::future_error(err)
 	#define mingw_throw_runtime_error(err)  	     throw std::runtime_error(err)
-	
+
 #else
-	
+
 	#define mingw_make_error_code(err) 			     int(err)
 
 	#define mingw_throw_system_error(err)   	     std::__throw_system_error(err)
 	#define mingw_throw_system_error_arg(err, arg)   std::__throw_system_error(err)
-	
+
 	#define mingw_throw_future_error(err)   	     std::__throw_future_error(err)
 	#define mingw_throw_runtime_error(err)  	     std::__throw_runtime_error(err)
-	
+
 #endif
-	
-	
+
+
 #endif // MINGW_THROW_H_
