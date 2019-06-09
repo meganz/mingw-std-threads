@@ -266,7 +266,7 @@ public:
             int errnum = errno;
             delete call;
 //  Note: Should only throw EINVAL, EAGAIN, EACCES
-            mingw_throw_system_error_arg(errnum, std::generic_category());
+            throw_error<std::system_error>(errnum, std::generic_category());
         } else
             mHandle = reinterpret_cast<HANDLE>(int_handle);
     }
@@ -281,11 +281,11 @@ public:
     {
         using namespace std;
         if (get_id() == id(GetCurrentThreadId()))
-            mingw_throw_system_error(mingw_make_error_code(errc::resource_deadlock_would_occur));
+            throw_error<system_error>(make_error_code(errc::resource_deadlock_would_occur));
         if (mHandle == kInvalidHandle)
-            mingw_throw_system_error(mingw_make_error_code(errc::no_such_process));
+            throw_error<system_error>(make_error_code(errc::no_such_process));
         if (!joinable())
-            mingw_throw_system_error(mingw_make_error_code(errc::invalid_argument));
+            throw_error<system_error>(make_error_code(errc::invalid_argument));
         WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
@@ -334,7 +334,7 @@ moving another thread to it.\n");
         if (!joinable())
         {
             using namespace std;
-            mingw_throw_system_error(mingw_make_error_code(errc::invalid_argument));
+            throw_error<std::system_error>(make_error_code(errc::invalid_argument));
         }
         if (mHandle != kInvalidHandle)
         {

@@ -75,12 +75,12 @@ public:
         :   mSemaphore(CreateSemaphore(NULL, 0, 0xFFFF, NULL))
     {
         if (mSemaphore == NULL)
-            mingw_throw_system_error_arg(GetLastError(), std::generic_category());
+            throw_error<std::system_error>(GetLastError(), std::generic_category());
         mWakeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
         if (mWakeEvent == NULL)
         {
             CloseHandle(mSemaphore);
-            mingw_throw_system_error_arg(GetLastError(), std::generic_category());
+            throw_error<std::system_error>(GetLastError(), std::generic_category());
         }
     }
     ~condition_variable_any()
@@ -120,7 +120,7 @@ private:
         else
         {
             using namespace std;
-            mingw_throw_system_error(mingw_make_error_code(errc::protocol_error));
+            throw_error<std::system_error>(make_error_code(errc::protocol_error));
         }
 		return false;
     }
