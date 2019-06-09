@@ -473,13 +473,7 @@ class promise : mingw_stdthread::detail::FutureBase
   void check_abandon (void)
   {
     if (valid() && !(mState->mType.load(std::memory_order_relaxed) & kSetFlag))
-    {
-      try {
-        mingw_throw_future_error(future_errc::broken_promise);
-      } catch (...) {
-        set_exception(std::current_exception());
-      }
-    }
+      set_exception(std::make_exception_ptr(future_error(future_errc::broken_promise)));
   }
 /// \bug Might throw more exceptions than specified by the standard...
 //  Need OS support for this...
@@ -953,7 +947,7 @@ struct StorageHelper<Ref&>
   static void store_deferred (FutureState<void*> * state_ptr, Func && func, Args&&... args)
   {
     try {
-      typedef typename std::remove_cv<Ref>::type Ref_non_cv;
+      using Ref_non_cv = typename std::remove_cv<Ref>::type;
       Ref & rf = invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
     } catch (...) {
