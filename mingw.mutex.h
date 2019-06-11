@@ -120,7 +120,7 @@ struct _OwnerThread
         fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex\
  detected. Throwing system exception\n");
         fflush(stderr);
-        mingw_throw_system_error(mingw_make_error_code(errc::resource_deadlock_would_occur));
+        throw_error<std::system_error>(make_error_code(errc::resource_deadlock_would_occur));
     }
     DWORD checkOwnerBeforeLock() const
     {
@@ -341,13 +341,13 @@ public:
 #endif
         if ((ret != WAIT_OBJECT_0) && (ret != WAIT_ABANDONED))
         {
-            mingw_throw_system_error_arg(GetLastError(), std::system_category());
+            throw_error<std::system_error>(GetLastError(), std::system_category());
         }
     }
     void unlock()
     {
         if (!ReleaseMutex(mHandle))
-            mingw_throw_system_error_arg(GetLastError(), std::system_category());
+            throw_error<std::system_error>(GetLastError(), std::system_category());
     }
     bool try_lock()
     {
