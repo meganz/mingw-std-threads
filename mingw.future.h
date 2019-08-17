@@ -477,11 +477,7 @@ class promise : mingw_stdthread::detail::FutureBase
   {
     if (valid() && !(mState->mType.load(std::memory_order_relaxed) & kSetFlag))
     {
-      try {
-        throw future_error(future_errc::broken_promise);
-      } catch (...) {
-        set_exception(std::current_exception());
-      }
+      set_exception(std::make_exception_ptr(future_error(future_errc::broken_promise)));
     }
   }
 /// \bug Might throw more exceptions than specified by the standard...
