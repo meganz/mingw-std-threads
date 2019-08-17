@@ -34,6 +34,10 @@
 #include "mingw.mutex.h"
 #include "mingw.condition_variable.h"
 
+#include <synchapi.h>
+#include <handleapi.h>
+#include <processthreadsapi.h>
+
 //  Note:
 //    std::shared_ptr is the natural choice for this. However, a custom
 //  implementation removes the need to keep a control block separate from the
@@ -484,6 +488,7 @@ class promise : mingw_stdthread::detail::FutureBase
 //  Need OS support for this...
   void make_ready_at_thread_exit (void)
   {
+    static constexpr DWORD kInfinite = 0xffffffffl;
 //  Need to turn the pseudohandle from GetCurrentThread() into a true handle...
     HANDLE thread_handle;
     BOOL success = DuplicateHandle(GetCurrentProcess(),
@@ -508,7 +513,7 @@ class promise : mingw_stdthread::detail::FutureBase
           }
           ptr->get_condition_variable().notify_all();
 //  Wait for the original thread to die.
-          WaitForSingleObject(thread_handle, INFINITE);
+          WaitForSingleObject(thread_handle, kInfinite);
           CloseHandle(thread_handle);
 
           {

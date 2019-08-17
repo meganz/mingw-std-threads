@@ -35,7 +35,7 @@
 #include <tuple>        //  For std::tuple
 #include <chrono>       //  For sleep timing.
 #include <memory>       //  For std::unique_ptr
-#include <ostream>      //  Stream output for thread ids.
+#include <iosfwd>       //  Stream output for thread ids.
 #include <utility>      //  For std::swap, std::forward
 
 //  For the invoke implementation only:
@@ -43,7 +43,10 @@
 //#include <utility>      //  For std::forward
 //#include <functional>   //  For std::reference_wrapper
 
-#include <windows.h>
+#include <synchapi.h>   //  For WaitForSingleObject
+#include <handleapi.h>  //  For CloseHandle, etc.
+#include <sysinfoapi.h> //  For GetNativeSystemInfo
+#include <processthreadsapi.h>  //  For GetCurrentThreadId
 #include <process.h>  //  For _beginthreadex
 
 #ifndef NDEBUG
@@ -210,6 +213,7 @@ public:
     };
 private:
     static constexpr HANDLE kInvalidHandle = nullptr;
+    static constexpr DWORD kInfinite = 0xffffffffl;
     HANDLE mHandle;
     id mThreadId;
 
@@ -284,7 +288,7 @@ public:
             throw system_error(make_error_code(errc::no_such_process));
         if (!joinable())
             throw system_error(make_error_code(errc::invalid_argument));
-        WaitForSingleObject(mHandle, INFINITE);
+        WaitForSingleObject(mHandle, kInfinite);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
         mThreadId.clear();
@@ -350,12 +354,13 @@ namespace this_thread
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
+        static constexpr DWORD kInfinite = 0xffffffffl;
         using namespace std::chrono;
         using rep = milliseconds::rep;
         rep ms = duration_cast<milliseconds>(sleep_duration).count();
         while (ms > 0)
         {
-            constexpr rep kMaxRep = static_cast<rep>(INFINITE - 1);
+            constexpr rep kMaxRep = static_cast<rep>(kInfinite - 1);
             auto sleepTime = (ms < kMaxRep) ? ms : kMaxRep;
             Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;

@@ -43,7 +43,13 @@
 #include <cstdio>
 #endif
 
-#include <windows.h>
+
+#include <sdkddkver.h>  //  Detect Windows version.
+#if STDMUTEX_RECURSION_CHECKS
+#include <processthreadsapi.h>  //  For GetCurrentThreadId
+#endif
+#include <synchapi.h> //  For InitializeCriticalSection, etc.
+#include <errhandlingapi.h> //  For GetLastError
 
 //  Need for the implementation of invoke
 #include "mingw.thread.h"
@@ -291,18 +297,21 @@ using xp::mutex;
 
 class recursive_timed_mutex
 {
+    static constexpr DWORD kWaitAbandoned = 0x00000080l;
+    static constexpr DWORD kWaitObject0 = 0x00000000l;
+    static constexpr DWORD kInfinite = 0xffffffffl;
     inline bool try_lock_internal (DWORD ms) noexcept
     {
         DWORD ret = WaitForSingleObject(mHandle, ms);
 #ifndef NDEBUG
-        if (ret == WAIT_ABANDONED)
+        if (ret == kWaitAbandoned)
         {
             using namespace std;
             fprintf(stderr, "FATAL: Thread terminated while holding a mutex.");
             terminate();
         }
 #endif
-        return (ret == WAIT_OBJECT_0) || (ret == WAIT_ABANDONED);
+        return (ret == kWaitObject0) || (ret == kWaitAbandoned);
     }
 protected:
     HANDLE mHandle;
@@ -325,19 +334,19 @@ public:
     }
     void lock()
     {
-        DWORD ret = WaitForSingleObject(mHandle, INFINITE);
+        DWORD ret = WaitForSingleObject(mHandle, kInfinite);
 //    If (ret == WAIT_ABANDONED), then the thread that held ownership was
 //  terminated. Behavior is undefined, but Windows will pass ownership to this
 //  thread.
 #ifndef NDEBUG
-        if (ret == WAIT_ABANDONED)
+        if (ret == kWaitAbandoned)
         {
             using namespace std;
             fprintf(stderr, "FATAL: Thread terminated while holding a mutex.");
             terminate();
         }
 #endif
-        if ((ret != WAIT_OBJECT_0) && (ret != WAIT_ABANDONED))
+        if ((ret != kWaitObject0) && (ret != kWaitAbandoned))
         {
             throw std::system_error(GetLastError(), std::system_category());
         }
@@ -358,7 +367,7 @@ public:
         auto timeout = duration_cast<milliseconds>(dur).count();
         while (timeout > 0)
         {
-          constexpr auto kMaxStep = static_cast<decltype(timeout)>(INFINITE-1);
+          constexpr auto kMaxStep = static_cast<decltype(timeout)>(kInfinite-1);
           auto step = (timeout < kMaxStep) ? timeout : kMaxStep;
           if (try_lock_internal(static_cast<DWORD>(step)))
             return true;
