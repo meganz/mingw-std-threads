@@ -98,8 +98,6 @@ public:
             if (expected >= kWriteBit - 1)
             {
                 using namespace std;
-                using namespace this_thread;
-                //yield();
                 expected = mCounter.load(std::memory_order_relaxed);
                 continue;
             }
