@@ -51,11 +51,12 @@
 //  For defer_lock_t, adopt_lock_t, and try_to_lock_t
 #include "mingw.mutex.h"
 //  For this_thread::yield.
-#include "mingw.thread.h"
+//#include "mingw.thread.h"
 
 //  Might be able to use native Slim Reader-Writer (SRW) locks.
 #ifdef _WIN32
-#include <windows.h>
+#include <sdkddkver.h>  //  Detect Windows version.
+#include <synchapi.h>
 #endif
 
 namespace mingw_stdthread
@@ -97,8 +98,6 @@ public:
             if (expected >= kWriteBit - 1)
             {
                 using namespace std;
-                using namespace this_thread;
-                yield();
                 expected = mCounter.load(std::memory_order_relaxed);
                 continue;
             }
@@ -144,12 +143,12 @@ public:
 //  Might be able to use relaxed memory order...
 //  Wait for the write-lock to be unlocked, then claim the write slot.
         counter_type current;
-        while ((current = mCounter.fetch_or(kWriteBit, std::memory_order_acquire)) & kWriteBit)
-            this_thread::yield();
+        while ((current = mCounter.fetch_or(kWriteBit, std::memory_order_acquire)) & kWriteBit);
+            //this_thread::yield();
 //  Wait for readers to finish up.
         while (current != kWriteBit)
         {
-            this_thread::yield();
+            //this_thread::yield();
             current = mCounter.load(std::memory_order_acquire);
         }
 #if STDMUTEX_RECURSION_CHECKS

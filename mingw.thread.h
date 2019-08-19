@@ -35,15 +35,15 @@
 #include <tuple>        //  For std::tuple
 #include <chrono>       //  For sleep timing.
 #include <memory>       //  For std::unique_ptr
-#include <ostream>      //  Stream output for thread ids.
+#include <iosfwd>       //  Stream output for thread ids.
 #include <utility>      //  For std::swap, std::forward
 
-//  For the invoke implementation only:
-#include <type_traits>  //  For std::result_of, etc.
-//#include <utility>      //  For std::forward
-//#include <functional>   //  For std::reference_wrapper
+#include "mingw.invoke.h"
 
-#include <windows.h>
+#include <synchapi.h>   //  For WaitForSingleObject
+#include <handleapi.h>  //  For CloseHandle, etc.
+#include <sysinfoapi.h> //  For GetNativeSystemInfo
+#include <processthreadsapi.h>  //  For GetCurrentThreadId
 #include <process.h>  //  For _beginthreadex
 
 #ifndef NDEBUG
@@ -59,89 +59,6 @@ namespace mingw_stdthread
 {
 namespace detail
 {
-//  For compatibility, implement std::invoke for C++11 and C++14
-#if __cplusplus < 201703L
-  template<bool PMemFunc, bool PMemData>
-  struct Invoker
-  {
-    template<class F, class... Args>
-    inline static typename std::result_of<F(Args...)>::type invoke (F&& f, Args&&... args)
-    {
-      return std::forward<F>(f)(std::forward<Args>(args)...);
-    }
-  };
-  template<bool>
-  struct InvokerHelper;
-
-  template<>
-  struct InvokerHelper<false>
-  {
-    template<class T1>
-    inline static auto get (T1&& t1) -> decltype(*std::forward<T1>(t1))
-    {
-      return *std::forward<T1>(t1);
-    }
-
-    template<class T1>
-    inline static auto get (const std::reference_wrapper<T1>& t1) -> decltype(t1.get())
-    {
-      return t1.get();
-    }
-  };
-
-  template<>
-  struct InvokerHelper<true>
-  {
-    template<class T1>
-    inline static auto get (T1&& t1) -> decltype(std::forward<T1>(t1))
-    {
-      return std::forward<T1>(t1);
-    }
-  };
-
-  template<>
-  struct Invoker<true, false>
-  {
-    template<class T, class F, class T1, class... Args>
-    inline static auto invoke (F T::* f, T1&& t1, Args&&... args) ->\
-      decltype((InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(std::forward<T1>(t1)).*f)(std::forward<Args>(args)...))
-    {
-      return (InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(std::forward<T1>(t1)).*f)(std::forward<Args>(args)...);
-    }
-  };
-
-  template<>
-  struct Invoker<false, true>
-  {
-    template<class T, class F, class T1, class... Args>
-    inline static auto invoke (F T::* f, T1&& t1, Args&&... args) ->\
-      decltype(InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(t1).*f)
-    {
-      return InvokerHelper<std::is_base_of<T,typename std::decay<T1>::type>::value>::get(t1).*f;
-    }
-  };
-
-  template<class F, class... Args>
-  struct InvokeResult
-  {
-    typedef Invoker<std::is_member_function_pointer<typename std::remove_reference<F>::type>::value,
-                    std::is_member_object_pointer<typename std::remove_reference<F>::type>::value &&
-                    (sizeof...(Args) == 1)> invoker;
-    inline static auto invoke (F&& f, Args&&... args) -> decltype(invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...))
-    {
-      return invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-    };
-  };
-
-  template<class F, class...Args>
-  auto invoke (F&& f, Args&&... args) -> decltype(InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...))
-  {
-    return InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-  }
-#else
-    using std::invoke;
-#endif
-
     template<std::size_t...>
     struct IntSeq {};
 
@@ -210,6 +127,7 @@ public:
     };
 private:
     static constexpr HANDLE kInvalidHandle = nullptr;
+    static constexpr DWORD kInfinite = 0xffffffffl;
     HANDLE mHandle;
     id mThreadId;
 
@@ -284,7 +202,7 @@ public:
             throw system_error(make_error_code(errc::no_such_process));
         if (!joinable())
             throw system_error(make_error_code(errc::invalid_argument));
-        WaitForSingleObject(mHandle, INFINITE);
+        WaitForSingleObject(mHandle, kInfinite);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
         mThreadId.clear();
@@ -350,12 +268,13 @@ namespace this_thread
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
+        static constexpr DWORD kInfinite = 0xffffffffl;
         using namespace std::chrono;
         using rep = milliseconds::rep;
         rep ms = duration_cast<milliseconds>(sleep_duration).count();
         while (ms > 0)
         {
-            constexpr rep kMaxRep = static_cast<rep>(INFINITE - 1);
+            constexpr rep kMaxRep = static_cast<rep>(kInfinite - 1);
             auto sleepTime = (ms < kMaxRep) ? ms : kMaxRep;
             Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;
