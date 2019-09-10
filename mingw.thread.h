@@ -50,6 +50,8 @@
 #include <cstdio>
 #endif
 
+#include "mingw.throw.h"
+
 #if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
 #error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
 #endif
@@ -182,7 +184,7 @@ public:
             int errnum = errno;
             delete call;
 //  Note: Should only throw EINVAL, EAGAIN, EACCES
-            throw std::system_error(errnum, std::generic_category());
+            throw_error<std::system_error>(errnum, std::generic_category());
         } else
             mHandle = reinterpret_cast<HANDLE>(int_handle);
     }
@@ -197,12 +199,12 @@ public:
     {
         using namespace std;
         if (get_id() == id(GetCurrentThreadId()))
-            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+            throw_error<system_error>(make_error_code(errc::resource_deadlock_would_occur));
         if (mHandle == kInvalidHandle)
-            throw system_error(make_error_code(errc::no_such_process));
+            throw_error<system_error>(make_error_code(errc::no_such_process));
         if (!joinable())
-            throw system_error(make_error_code(errc::invalid_argument));
-        WaitForSingleObject(mHandle, kInfinite);
+            throw_error<system_error>(make_error_code(errc::invalid_argument));
+        WaitForSingleObject(mHandle, INFINITE);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
         mThreadId.clear();
@@ -250,7 +252,7 @@ moving another thread to it.\n");
         if (!joinable())
         {
             using namespace std;
-            throw system_error(make_error_code(errc::invalid_argument));
+            throw_error<std::system_error>(make_error_code(errc::invalid_argument));
         }
         if (mHandle != kInvalidHandle)
         {

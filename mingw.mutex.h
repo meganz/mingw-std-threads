@@ -34,6 +34,7 @@
 #define STDMUTEX_RECURSION_CHECKS 1
 #endif
 
+
 #include <chrono>
 #include <system_error>
 #include <atomic>
@@ -53,6 +54,8 @@
 #include <handleapi.h>
 
 //  Need for the implementation of invoke
+#include "mingw.thread.h"
+#include "mingw.throw.h"
 #include "mingw.invoke.h"
 
 #if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
@@ -125,7 +128,7 @@ struct _OwnerThread
         fprintf(stderr, "FATAL: Recursive locking of non-recursive mutex\
  detected. Throwing system exception\n");
         fflush(stderr);
-        throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+        throw_error<std::system_error>(make_error_code(errc::resource_deadlock_would_occur));
     }
     DWORD checkOwnerBeforeLock() const
     {
@@ -349,13 +352,13 @@ public:
 #endif
         if ((ret != kWaitObject0) && (ret != kWaitAbandoned))
         {
-            throw std::system_error(GetLastError(), std::system_category());
+            throw_error<std::system_error>(GetLastError(), std::system_category());
         }
     }
     void unlock()
     {
         if (!ReleaseMutex(mHandle))
-            throw std::system_error(GetLastError(), std::system_category());
+            throw_error<std::system_error>(GetLastError(), std::system_category());
     }
     bool try_lock()
     {
