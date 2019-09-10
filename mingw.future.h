@@ -35,6 +35,10 @@
 #include "mingw.condition_variable.h"
 #include "mingw.throw.h"
 
+#include <synchapi.h>
+#include <handleapi.h>
+#include <processthreadsapi.h>
+
 //  Note:
 //    std::shared_ptr is the natural choice for this. However, a custom
 //  implementation removes the need to keep a control block separate from the
@@ -473,12 +477,15 @@ class promise : mingw_stdthread::detail::FutureBase
   void check_abandon (void)
   {
     if (valid() && !(mState->mType.load(std::memory_order_relaxed) & kSetFlag))
+    {
       set_exception(std::make_exception_ptr(future_error(future_errc::broken_promise)));
+    }
   }
 /// \bug Might throw more exceptions than specified by the standard...
 //  Need OS support for this...
   void make_ready_at_thread_exit (void)
   {
+    static constexpr DWORD kInfinite = 0xffffffffl;
 //  Need to turn the pseudohandle from GetCurrentThread() into a true handle...
     HANDLE thread_handle;
     BOOL success = DuplicateHandle(GetCurrentProcess(),
@@ -505,7 +512,7 @@ class promise : mingw_stdthread::detail::FutureBase
           }
           ptr->get_condition_variable().notify_all();
 //  Wait for the original thread to die.
-          WaitForSingleObject(thread_handle, INFINITE);
+          WaitForSingleObject(thread_handle, kInfinite);
           CloseHandle(thread_handle);
 
           {
