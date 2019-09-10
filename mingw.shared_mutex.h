@@ -31,7 +31,6 @@
 #error A C++11 compiler is required!
 #endif
 
-
 #include <cassert>
 //  For descriptive errors.
 #include <system_error>
@@ -52,8 +51,7 @@
 //  For defer_lock_t, adopt_lock_t, and try_to_lock_t
 #include "mingw.mutex.h"
 //  For this_thread::yield.
-#include "mingw.thread.h"
-#include "mingw.throw.h"
+//#include "mingw.thread.h"
 
 //  Might be able to use native Slim Reader-Writer (SRW) locks.
 #ifdef _WIN32
@@ -129,7 +127,7 @@ public:
         using namespace std;
 #ifndef NDEBUG
         if (!(mCounter.fetch_sub(1, memory_order_release) & static_cast<counter_type>(~kWriteBit)))
-            throw_error<system_error>(make_error_code(errc::operation_not_permitted));
+            throw system_error(make_error_code(errc::operation_not_permitted));
 #else
         mCounter.fetch_sub(1, memory_order_release);
 #endif
@@ -182,7 +180,7 @@ public:
         using namespace std;
 #ifndef NDEBUG
         if (mCounter.load(memory_order_relaxed) != kWriteBit)
-            throw_error<system_error>(make_error_code(errc::operation_not_permitted));
+            throw system_error(make_error_code(errc::operation_not_permitted));
 #endif
         mCounter.store(0, memory_order_release);
     }
@@ -312,9 +310,9 @@ class shared_lock
     {
         using namespace std;
         if (mMutex == nullptr)
-            throw_error<system_error>(make_error_code(errc::operation_not_permitted));
+            throw system_error(make_error_code(errc::operation_not_permitted));
         if (mOwns)
-            throw_error<system_error>(make_error_code(errc::resource_deadlock_would_occur));
+            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
     }
 public:
     typedef Mutex mutex_type;
@@ -427,7 +425,7 @@ public:
     {
         using namespace std;
         if (!mOwns)
-            throw_error<system_error>(make_error_code(errc::operation_not_permitted));
+            throw system_error(make_error_code(errc::operation_not_permitted));
         mMutex->unlock_shared();
         mOwns = false;
     }

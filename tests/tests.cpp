@@ -141,22 +141,28 @@ void test_future ()
   future<T> future_broken = promise_broken.get_future();
   future<T> future_late = promise_late.get_future();
 
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
   try {
     future<T> impossible_future = promise_value.get_future();
     log("WARNING: Promise failed to detect that its future was already retrieved.");
   } catch(...) {
     log("\tPromise successfully prevented redundant future retrieval.");
   }
-#endif
 
   log("\tPassing promises to a new thread...");
   thread t ([](promise<T> p_value, promise<T> p_exception, promise<T>, promise<T> p_late)
     {
       this_thread::sleep_for(std::chrono::seconds(1));
-      p_late.set_exception_at_thread_exit(std::make_exception_ptr(std::runtime_error("Thrown during the thread.")));
+      try {
+        throw std::runtime_error("Thrown during the thread.");
+      } catch (...) {
+        p_late.set_exception_at_thread_exit(std::current_exception());
+      }
       test_future_set_value(p_value);
-      p_exception.set_exception(std::make_exception_ptr(std::runtime_error("Things happened as expected.")));
+      try {
+        throw std::runtime_error("Things happened as expected.");
+      } catch (...) {
+        p_exception.set_exception(std::current_exception());
+      }
       this_thread::sleep_for(std::chrono::seconds(2));
     },
     std::move(promise_value),
@@ -165,12 +171,9 @@ void test_future ()
     std::move(promise_late));
   t.detach();
 
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
   try {
-#endif
     bool was_expected = test_future_get_value(future_value);
     log("\tReceived %sexpected value.", (was_expected ? "" : "un"));
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
   } catch (...) {
     log("WARNING: Exception where there should be none!");
     throw;
@@ -181,10 +184,8 @@ void test_future ()
   } catch (std::exception & e) {
     log("\tReceived an exception (\"%s\") as expected.", e.what());
   }
-#endif
 
   log("\tWaiting for the thread to exit...");
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
   try {
     test_future_get_value(future_late);
     log("WARNING: Got a value where there should be an exception!");
@@ -198,7 +199,6 @@ void test_future ()
   } catch (std::future_error & e) {
     log("\tReceived a future_error (\"%s\") as expected.", e.what());
   }
-#endif
 
   log("\tDeferring a function...");
   auto async_deferred = async(launch::deferred, [] (void) -> T
@@ -314,9 +314,7 @@ int main()
     }
     std::thread t([](TestMove&& a, const char* b, int c) mutable
     {
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
         try
-#endif
         {
             log("Worker thread started, sleeping for a while...");
 //  Thread might move the string more than once.
@@ -350,17 +348,13 @@ int main()
 
             log("Worker thread finishing");
         }
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
         catch(std::exception& e)
         {
             printf("EXCEPTION in worker thread: %s\n", e.what());
         }
-#endif
     },
     TestMove("move test"), "test message", -20);
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
     try
-#endif
     {
       log("Main thread: Locking mutex, waiting on condvar...");
       {
@@ -389,12 +383,10 @@ int main()
       log("Main thread: Worker thread joined");
       fflush(stdout);
     }
-#if defined(__cpp_exceptions) && (__cpp_exceptions >= 199711L)
     catch(std::exception& e)
     {
         log("EXCEPTION in main thread: %s", e.what());
     }
-#endif
     once_flag of;
     call_once(of, test_call_once, 1, "test");
     call_once(of, test_call_once, 1, "ERROR! Should not be called second time");
