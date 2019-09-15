@@ -312,6 +312,33 @@ int main()
         std::hash<thread::id> hasher;
         std::cout << "Hash:\t" << hasher(this_thread::get_id()) << "\n";
     }
+
+//  Regression test: Thread must copy any argument that is passed by value.
+    {
+        std::vector<std::thread> loop_threads;
+        std::atomic<int> i_vals_touched [4];// { 0, 0, 0, 0 };
+        for (int i = 0; i < 4; ++i)
+            i_vals_touched[i].store(0, std::memory_order_relaxed);
+        for (int i = 0; i < 4; ++i)
+        {
+            loop_threads.push_back(std::thread([&](int c)
+                {
+                    log("For-loop test thread got value: %i", c);
+                    i_vals_touched[c].fetch_add(1, std::memory_order_relaxed);
+                }, i));
+        }
+        for (std::thread & thr : loop_threads)
+            thr.join();
+        for (int i = 0; i < 4; ++i)
+        {
+            if (i_vals_touched[i] != 1)
+            {
+                log("FATAL: Threads are not copying arguments!");
+                return 1;
+            }
+        }
+    }
+
     std::thread t([](TestMove&& a, const char* b, int c) mutable
     {
         try
