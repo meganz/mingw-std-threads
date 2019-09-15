@@ -72,18 +72,22 @@ namespace detail
     template<class Func, typename... Args>
     class ThreadFuncCall
     {
-        typedef std::tuple<Args...> Tuple;
-        Func mFunc;
+        using Tuple = std::tuple<typename std::decay<Args>::type...>;
+        typename std::decay<Func>::type mFunc;
         Tuple mArgs;
 
         template <std::size_t... S>
         void callFunc(detail::IntSeq<S...>)
         {
-            detail::invoke(std::forward<Func>(mFunc), std::get<S>(std::forward<Tuple>(mArgs)) ...);
+//  Note: Only called once (per thread)
+            detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
         }
     public:
         ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
-        :mFunc(std::forward<Func>(aFunc)), mArgs(std::forward<Args>(aArgs)...){}
+          : mFunc(std::forward<Func>(aFunc)),
+            mArgs(std::forward<Args>(aArgs)...)
+        {
+        }
 
         void callFunc()
         {
