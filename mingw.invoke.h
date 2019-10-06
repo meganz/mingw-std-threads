@@ -92,7 +92,7 @@ namespace detail
     inline static auto invoke (F&& f, Args&&... args) -> decltype(invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...))
     {
       return invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-    };
+    }
   };
 
   template<class F, class...Args>
