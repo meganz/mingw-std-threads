@@ -68,20 +68,19 @@ namespace detail
     template<std::size_t... S>
     struct GenIntSeq<0, S...> { typedef IntSeq<S...> type; };
 
-    // We can't define the Call struct in the function - the standard forbids template methods in that case
-    template<class Func, typename... Args>
-    class ThreadFuncCall
+//    Use a template specialization to avoid relying on compiler optimization
+//  when determining the parameter integer sequence.
+    template<class Func, class T, typename... Args>
+    class ThreadFuncCall;
+// We can't define the Call struct in the function - the standard forbids template methods in that case
+    template<class Func, std::size_t... S, typename... Args>
+    class ThreadFuncCall<Func, detail::IntSeq<S...>, Args...>
     {
+        static_assert(sizeof...(S) == sizeof...(Args), "Args must match.");
         using Tuple = std::tuple<typename std::decay<Args>::type...>;
         typename std::decay<Func>::type mFunc;
         Tuple mArgs;
 
-        template <std::size_t... S>
-        void callFunc(detail::IntSeq<S...>)
-        {
-//  Note: Only called once (per thread)
-            detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
-        }
     public:
         ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
           : mFunc(std::forward<Func>(aFunc)),
@@ -91,7 +90,7 @@ namespace detail
 
         void callFunc()
         {
-            callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
+            detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
         }
     };
 
@@ -174,7 +173,8 @@ public:
     template<class Func, typename... Args>
     explicit thread(Func&& func, Args&&... args) : mHandle(), mThreadId()
     {
-        typedef detail::ThreadFuncCall<Func, Args...> Call;
+        using ArgSequence = typename detail::GenIntSeq<sizeof...(Args)>::type;
+        using Call = detail::ThreadFuncCall<Func, ArgSequence, Args...>;
         auto call = new Call(
             std::forward<Func>(func), std::forward<Args>(args)...);
         auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
