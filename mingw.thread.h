@@ -177,9 +177,9 @@ public:
         using Call = detail::ThreadFuncCall<Func, ArgSequence, Args...>;
         auto call = new Call(
             std::forward<Func>(func), std::forward<Args>(args)...);
+        unsigned id_receiver;
         auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
-            static_cast<LPVOID>(call), 0,
-            reinterpret_cast<unsigned*>(&(mThreadId.mId)));
+            static_cast<LPVOID>(call), 0, &id_receiver);
         if (int_handle == 0)
         {
             mHandle = kInvalidHandle;
@@ -187,8 +187,10 @@ public:
             delete call;
 //  Note: Should only throw EINVAL, EAGAIN, EACCES
             throw std::system_error(errnum, std::generic_category());
-        } else
+        } else {
+            mThreadId.mId = id_receiver;
             mHandle = reinterpret_cast<HANDLE>(int_handle);
+        }
     }
 
     bool joinable() const {return mHandle != kInvalidHandle;}
