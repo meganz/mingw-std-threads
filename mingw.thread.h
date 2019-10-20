@@ -94,6 +94,8 @@ namespace detail
         }
     };
 
+//  Allow construction of threads without exposing implementation.
+    class ThreadIdTool;
 } //  Namespace "detail"
 
 class thread
@@ -101,12 +103,13 @@ class thread
 public:
     class id
     {
-        DWORD mId;
-        void clear() {mId = 0;}
+        DWORD mId = 0;
         friend class thread;
         friend class std::hash<id>;
+        friend class detail::ThreadIdTool;
+        explicit id(DWORD aId) noexcept : mId(aId){}
     public:
-        explicit id(DWORD aId=0) noexcept : mId(aId){}
+        id (void) noexcept = default;
         friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
         friend bool operator!=(id x, id y) noexcept {return x.mId != y.mId; }
         friend bool operator< (id x, id y) noexcept {return x.mId <  y.mId; }
@@ -165,7 +168,7 @@ public:
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
     {
         other.mHandle = kInvalidHandle;
-        other.mThreadId.clear();
+        other.mThreadId = id{};
     }
 
     thread(const thread &other)=delete;
@@ -211,7 +214,7 @@ public:
         WaitForSingleObject(mHandle, kInfinite);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
-        mThreadId.clear();
+        mThreadId = id{};
     }
 
     ~thread()
@@ -263,13 +266,28 @@ moving another thread to it.\n");
             CloseHandle(mHandle);
             mHandle = kInvalidHandle;
         }
-        mThreadId.clear();
+        mThreadId = id{};
     }
 };
 
+namespace detail
+{
+    class ThreadIdTool
+    {
+    public:
+        static thread::id make_id (DWORD base_id) noexcept
+        {
+            return thread::id(base_id);
+        }
+    };
+} //  Namespace "detail"
+
 namespace this_thread
 {
-    inline thread::id get_id() noexcept {return thread::id(GetCurrentThreadId());}
+    inline thread::id get_id() noexcept
+    {
+        return detail::ThreadIdTool::make_id(GetCurrentThreadId());
+    }
     inline void yield() noexcept {Sleep(0);}
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
