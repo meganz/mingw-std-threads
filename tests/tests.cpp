@@ -263,6 +263,8 @@ void test_future ()
 
 int main()
 {
+    static_assert(std::is_trivially_copyable<thread::id>::value,
+                  "thread::id must be trivially copyable.");
     TEST_SL_MV_CPY(mutex)
     TEST_SL_MV_CPY(recursive_mutex)
     TEST_SL_MV_CPY(timed_mutex)
