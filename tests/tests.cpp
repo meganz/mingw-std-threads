@@ -1,8 +1,16 @@
-#include "../mingw.thread.h"
-#include "../mingw.mutex.h"
-#include "../mingw.condition_variable.h"
-#include "../mingw.shared_mutex.h"
-#include "../mingw.future.h"
+#ifndef USE_STD_LIKE_HEADERS
+  #include "../mingw.thread.h"
+  #include "../mingw.mutex.h"
+  #include "../mingw.condition_variable.h"
+  #include "../mingw.shared_mutex.h"
+  #include "../mingw.future.h"
+#else
+  #include <thread>
+  #include <mutex>
+  #include <condition_variable>
+  #include <shared_mutex>
+  #include <future>
+#endif
 #include <atomic>
 #include <cassert>
 #include <string>
