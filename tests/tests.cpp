@@ -1,9 +1,9 @@
-#ifndef USE_STD_LIKE_HEADERS
-  #include "../mingw.thread.h"
-  #include "../mingw.mutex.h"
-  #include "../mingw.condition_variable.h"
-  #include "../mingw.shared_mutex.h"
-  #include "../mingw.future.h"
+#ifndef MINGW_STDTHREADS_GENERATED_STDHEADERS
+  #include <mingw.thread.h>
+  #include <mingw.mutex.h>
+  #include <mingw.condition_variable.h>
+  #include <mingw.shared_mutex.h>
+  #include <mingw.future.h>
 #else
   #include <thread>
   #include <mutex>
@@ -271,6 +271,10 @@ void test_future ()
 
 int main()
 {
+#ifdef MINGW_STDTHREADS_GENERATED_STDHEADERS
+    std::cout << "Using cmake-generated stdheaders, ";
+#endif
+
     TEST_SL_MV_CPY(mutex)
     TEST_SL_MV_CPY(recursive_mutex)
     TEST_SL_MV_CPY(timed_mutex)
