@@ -9,6 +9,13 @@ function(generate_mingw_stdthreads_header header_file_name
     set(template_file_path "${PROJECT_SOURCE_DIR}/template.cpp")
     set(destination_file_path "${output_include_path}/${header_file_name}")
 
+    # Check if compiler is gcc or clang
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        # Actually this should never happen because it should have already
+        # been checked in the parent CMakeLists.txt
+        message(FATAL_ERROR "Unsupported compiler")
+    endif()
+
     # Call g++ to retrieve header path
     # The -H option will let g++ outputs header dependencies to stderr
     set(compiler_arguments 

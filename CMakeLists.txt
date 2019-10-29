@@ -16,10 +16,20 @@ add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE "${PROJECT_SOURCE_DIR}")
 
 if(MINGW_STDTHREADS_GENERATE_STDHEADERS)
-    add_subdirectory(cmake_stdheaders_generator)
-    target_link_libraries(${PROJECT_NAME} INTERFACE cmake_stdheaders_generator)
+    # Check if we are using gcc or clang
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        # Add as dependency and generate std headers
+        add_subdirectory(cmake_stdheaders_generator)
+        target_link_libraries(${PROJECT_NAME} INTERFACE 
+                              cmake_stdheaders_generator)
+    else()
+        message(WARNING "Cannot generate std headers with this compiler: "
+                        ${CMAKE_CXX_COMPILER_ID} ". "
+                        "Please fall back to #include <mingw.xxx.h>")
+    endif()
 endif()
 
+# Build tests.exe
 if(MINGW_STDTHREADS_BUILD_TEST)
     add_subdirectory(tests)
 endif()
