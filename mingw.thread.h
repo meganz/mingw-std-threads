@@ -40,10 +40,17 @@
 
 #include "mingw.invoke.h"
 
+#if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
+#pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
+ with Microsoft's API. We'll try to work around this, but we can make no\
+ guarantees. This problem does not exist in MinGW-w64."
+#include <windows.h>    //  No further granularity can be expected.
+#else
 #include <synchapi.h>   //  For WaitForSingleObject
 #include <handleapi.h>  //  For CloseHandle, etc.
 #include <sysinfoapi.h> //  For GetNativeSystemInfo
 #include <processthreadsapi.h>  //  For GetCurrentThreadId
+#endif
 #include <process.h>  //  For _beginthreadex
 
 #ifndef NDEBUG
