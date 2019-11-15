@@ -40,10 +40,17 @@
 
 #include "mingw.invoke.h"
 
+#if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
+#pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
+ with Microsoft's API. We'll try to work around this, but we can make no\
+ guarantees. This problem does not exist in MinGW-w64."
+#include <windows.h>    //  No further granularity can be expected.
+#else
 #include <synchapi.h>   //  For WaitForSingleObject
 #include <handleapi.h>  //  For CloseHandle, etc.
 #include <sysinfoapi.h> //  For GetNativeSystemInfo
 #include <processthreadsapi.h>  //  For GetCurrentThreadId
+#endif
 #include <process.h>  //  For _beginthreadex
 
 #ifndef NDEBUG
@@ -68,20 +75,19 @@ namespace detail
     template<std::size_t... S>
     struct GenIntSeq<0, S...> { typedef IntSeq<S...> type; };
 
-    // We can't define the Call struct in the function - the standard forbids template methods in that case
-    template<class Func, typename... Args>
-    class ThreadFuncCall
+//    Use a template specialization to avoid relying on compiler optimization
+//  when determining the parameter integer sequence.
+    template<class Func, class T, typename... Args>
+    class ThreadFuncCall;
+// We can't define the Call struct in the function - the standard forbids template methods in that case
+    template<class Func, std::size_t... S, typename... Args>
+    class ThreadFuncCall<Func, detail::IntSeq<S...>, Args...>
     {
+        static_assert(sizeof...(S) == sizeof...(Args), "Args must match.");
         using Tuple = std::tuple<typename std::decay<Args>::type...>;
         typename std::decay<Func>::type mFunc;
         Tuple mArgs;
 
-        template <std::size_t... S>
-        void callFunc(detail::IntSeq<S...>)
-        {
-//  Note: Only called once (per thread)
-            detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
-        }
     public:
         ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
           : mFunc(std::forward<Func>(aFunc)),
@@ -91,10 +97,12 @@ namespace detail
 
         void callFunc()
         {
-            callFunc(typename detail::GenIntSeq<sizeof...(Args)>::type());
+            detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
         }
     };
 
+//  Allow construction of threads without exposing implementation.
+    class ThreadIdTool;
 } //  Namespace "detail"
 
 class thread
@@ -102,12 +110,13 @@ class thread
 public:
     class id
     {
-        DWORD mId;
-        void clear() {mId = 0;}
+        DWORD mId = 0;
         friend class thread;
         friend class std::hash<id>;
+        friend class detail::ThreadIdTool;
+        explicit id(DWORD aId) noexcept : mId(aId){}
     public:
-        explicit id(DWORD aId=0) noexcept : mId(aId){}
+        id (void) noexcept = default;
         friend bool operator==(id x, id y) noexcept {return x.mId == y.mId; }
         friend bool operator!=(id x, id y) noexcept {return x.mId != y.mId; }
         friend bool operator< (id x, id y) noexcept {return x.mId <  y.mId; }
@@ -166,7 +175,7 @@ public:
     :mHandle(other.mHandle), mThreadId(other.mThreadId)
     {
         other.mHandle = kInvalidHandle;
-        other.mThreadId.clear();
+        other.mThreadId = id{};
     }
 
     thread(const thread &other)=delete;
@@ -174,12 +183,13 @@ public:
     template<class Func, typename... Args>
     explicit thread(Func&& func, Args&&... args) : mHandle(), mThreadId()
     {
-        typedef detail::ThreadFuncCall<Func, Args...> Call;
+        using ArgSequence = typename detail::GenIntSeq<sizeof...(Args)>::type;
+        using Call = detail::ThreadFuncCall<Func, ArgSequence, Args...>;
         auto call = new Call(
             std::forward<Func>(func), std::forward<Args>(args)...);
+        unsigned id_receiver;
         auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
-            static_cast<LPVOID>(call), 0,
-            reinterpret_cast<unsigned*>(&(mThreadId.mId)));
+            static_cast<LPVOID>(call), 0, &id_receiver);
         if (int_handle == 0)
         {
             mHandle = kInvalidHandle;
@@ -187,8 +197,10 @@ public:
             delete call;
 //  Note: Should only throw EINVAL, EAGAIN, EACCES
             throw std::system_error(errnum, std::generic_category());
-        } else
+        } else {
+            mThreadId.mId = id_receiver;
             mHandle = reinterpret_cast<HANDLE>(int_handle);
+        }
     }
 
     bool joinable() const {return mHandle != kInvalidHandle;}
@@ -209,7 +221,7 @@ public:
         WaitForSingleObject(mHandle, kInfinite);
         CloseHandle(mHandle);
         mHandle = kInvalidHandle;
-        mThreadId.clear();
+        mThreadId = id{};
     }
 
     ~thread()
@@ -261,13 +273,28 @@ moving another thread to it.\n");
             CloseHandle(mHandle);
             mHandle = kInvalidHandle;
         }
-        mThreadId.clear();
+        mThreadId = id{};
     }
 };
 
+namespace detail
+{
+    class ThreadIdTool
+    {
+    public:
+        static thread::id make_id (DWORD base_id) noexcept
+        {
+            return thread::id(base_id);
+        }
+    };
+} //  Namespace "detail"
+
 namespace this_thread
 {
-    inline thread::id get_id() noexcept {return thread::id(GetCurrentThreadId());}
+    inline thread::id get_id() noexcept
+    {
+        return detail::ThreadIdTool::make_id(GetCurrentThreadId());
+    }
     inline void yield() noexcept {Sleep(0);}
     template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)

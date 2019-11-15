@@ -56,7 +56,14 @@
 //  Might be able to use native Slim Reader-Writer (SRW) locks.
 #ifdef _WIN32
 #include <sdkddkver.h>  //  Detect Windows version.
+#if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
+#pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
+ with Microsoft's API. We'll try to work around this, but we can make no\
+ guarantees. This problem does not exist in MinGW-w64."
+#include <windows.h>    //  No further granularity can be expected.
+#else
 #include <synchapi.h>
+#endif
 #endif
 
 namespace mingw_stdthread

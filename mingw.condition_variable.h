@@ -34,11 +34,20 @@
 #include <sdkddkver.h>  //  Detect Windows version.
 #if (WINVER < _WIN32_WINNT_VISTA)
 #include <atomic>
+#endif
+#if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
+#pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
+ with Microsoft's API. We'll try to work around this, but we can make no\
+ guarantees. This problem does not exist in MinGW-w64."
+#include <windows.h>    //  No further granularity can be expected.
+#else
+#if (WINVER < _WIN32_WINNT_VISTA)
 #include <windef.h>
 #include <winbase.h>  //  For CreateSemaphore
 #include <handleapi.h>
 #endif
 #include <synchapi.h>
+#endif
 
 #include "mingw.mutex.h"
 #include "mingw.shared_mutex.h"

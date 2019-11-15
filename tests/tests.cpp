@@ -274,6 +274,8 @@ int main()
 #ifdef MINGW_STDTHREADS_GENERATED_STDHEADERS
     std::cout << "Using cmake-generated stdheaders, ";
 #endif
+    static_assert(std::is_trivially_copyable<thread::id>::value,
+                  "thread::id must be trivially copyable.");
 
     TEST_SL_MV_CPY(mutex)
     TEST_SL_MV_CPY(recursive_mutex)
