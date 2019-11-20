@@ -1,8 +1,16 @@
-#include "../mingw.thread.h"
-#include "../mingw.mutex.h"
-#include "../mingw.condition_variable.h"
-#include "../mingw.shared_mutex.h"
-#include "../mingw.future.h"
+#ifndef MINGW_STDTHREADS_GENERATED_STDHEADERS
+  #include <mingw.thread.h>
+  #include <mingw.mutex.h>
+  #include <mingw.condition_variable.h>
+  #include <mingw.shared_mutex.h>
+  #include <mingw.future.h>
+#else
+  #include <thread>
+  #include <mutex>
+  #include <condition_variable>
+  #include <shared_mutex>
+  #include <future>
+#endif
 #include <atomic>
 #include <cassert>
 #include <string>
@@ -263,8 +271,12 @@ void test_future ()
 
 int main()
 {
+#ifdef MINGW_STDTHREADS_GENERATED_STDHEADERS
+    std::cout << "Using cmake-generated stdheaders, ";
+#endif
     static_assert(std::is_trivially_copyable<thread::id>::value,
                   "thread::id must be trivially copyable.");
+
     TEST_SL_MV_CPY(mutex)
     TEST_SL_MV_CPY(recursive_mutex)
     TEST_SL_MV_CPY(timed_mutex)
