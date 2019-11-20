@@ -33,7 +33,7 @@ target_link_libraries(${TARGET} PRIVATE mingw_stdthreads)
 ```
 When CMake generates project files, headers named in the "standard header" way will be generated and added to your include path. Then you can avoid stuffs like `mingw.thread.h`, and keep using `#include <thread>` like always. In addition, `MINGW_STDTHREADS_GENERATED_STDHEADERS` will be defined, you can use this macro to check if those generated headers are actually available.
 
-If you aren't using CMake, you can use one of the three scripts inside [utility_scripts](utility_scripts) directory to manually generate those "std-like" headers.
+If you aren't using CMake, you can use one of the three scripts inside [utility_scripts](utility_scripts) directory to manually generate those "std-like" headers. Note that this requires Microsoft Power Shell, so if you are cross-compiling, you would need to install Power Shell.
 
 Compatibility
 -------------
