@@ -38,6 +38,7 @@ function(generate_mingw_stdthreads_header header_file_name
                             "compiler output was:\n${compiler_output}")
     endif()
 
+    get_filename_component(header_file_name "${header_file_name}" NAME_WE)
     # Get full path to mingw-stdthreads header
     set(mingw_stdthreads_headers_generator_library_header
         "${mingw_stdthreads_folder}/mingw.${header_file_name}.h")
@@ -69,6 +70,8 @@ generate_mingw_stdthreads_header(mutex "${MINGW_STDTHREADS_DIR}")
 generate_mingw_stdthreads_header(shared_mutex "${MINGW_STDTHREADS_DIR}")
 # <thread>
 generate_mingw_stdthreads_header(thread "${MINGW_STDTHREADS_DIR}")
+# <bits/c++config.h>
+generate_mingw_stdthreads_header(bits/c++config.h "${MINGW_STDTHREADS_DIR}")
 
 # the generated headers are to be considered as a header only library
 # so we create an interface target

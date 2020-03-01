@@ -62,7 +62,7 @@ param (
 $ErrorActionPreference = "Stop";
 
 # headers to be generated
-$headers = @("condition_variable", "future", "mutex", "shared_mutex", "thread")
+$headers = @("condition_variable", "future", "mutex", "shared_mutex", "thread", "bits/c++config.h")
 
 # ask for user input in interactive mode
 if ($Interactive) {
@@ -165,7 +165,7 @@ $stdHeaders = @()
 # set a label called "nextHeader" to allow continue with outer loop
 :nextHeader foreach ($header in $headers) {
     # check if mingw-std-threads headers exist
-    $myHeader = "mingw.$header.h"
+    $myHeader = "mingw." + $((Split-Path $header -Leaf).TrimEnd(".h")) + ".h"
     $myHeader = Join-Path -Path $MinGWStdThreadsPath -ChildPath $myHeader
     if (-not (Test-Path -LiteralPath $myHeader -PathType "Leaf")) {
         Write-Error "Error: mingw-std-threads header not found: $myHeader"
@@ -174,37 +174,27 @@ $stdHeaders = @()
     foreach ($inludePath in $includePaths) {
         $fullPath = Join-Path -Path $inludePath -ChildPath $header
         if (Test-Path -LiteralPath $fullPath -PathType "Leaf") {
-            $fullPath = (Get-Item -LiteralPath $fullPath).FullName
-            $stdHeaders += $fullPath
+            $stdHeader = (Get-Item -LiteralPath $fullPath).FullName
             Write-Output "Found std header: $fullPath"
+
+            # both two headers should already have include guards
+            # but we still add a #pragma once just to be safe
+            $content = "#pragma once`r`n"
+            $content += "#include `"$stdHeader`"`r`n"
+            $content += "#include `"$myHeader`"`r`n";
+
+            $outputFileName = Join-Path -Path $DestinationFolder -ChildPath $header
+            Write-Output "Writing file: $outputFileName"
+
+            New-Item -Path $(Split-Path $outputFileName -Parent) -Type "Directory" -Force
+            $content | Out-File -Encoding "utf8" -FilePath $outputFileName
+
             # if found matching header, continue with outer loop
             continue nextHeader
         }
     }
 
     Write-Error "Error: didn't find $header in any search paths"
-}
-
-# generate headers
-Write-Output "Generating headers..."
-foreach ($stdHeader in $stdHeaders) {
-    $headerFileName = (Get-Item -LiteralPath $stdHeader).Name
-    $myHeader = "mingw.$headerFileName.h"
-    $myHeader = Join-Path -Path $MinGWStdThreadsPath -ChildPath $myHeader
-    Write-Output "Generating <$headerFileName> from $myHeader and $stdHeader..."
-
-    # both two headers should already have include guards
-    # but we still add a #pragma once just to be safe
-    $content = "#pragma once`r`n"
-    $content += "#include `"$stdHeader`"`r`n"
-    $content += "#include `"$myHeader`"`r`n";
-
-    $outputFileName = Join-Path -Path $DestinationFolder -ChildPath $headerFileName
-    Write-Output "Writing file: $outputFileName"
-
-    # use .NET's method to output lines to avoid UTF-8 BOM
-    $noBomEncoding = New-Object -TypeName "System.Text.UTF8Encoding" -ArgumentList $false
-    [IO.File]::WriteAllText($outputFileName, $content, $noBomEncoding)
 }
 
 $message = "Successfully generated std-like headers. Use them by adding "
@@ -218,9 +208,7 @@ if ($GenerateCompilerWrapperWithFileName) {
     $command += "$compiler %* `"-I$DestinationFolder`""
     $wrapper = New-Item -Path $GenerateCompilerWrapperWithFileName -ItemType "File" -Force
 
-    # use .NET's method to output lines to avoid UTF-8 BOM
-    $noBomEncoding = New-Object -TypeName "System.Text.UTF8Encoding" -ArgumentList $false
-    [IO.File]::WriteAllText($wrapper, $command, $noBomEncoding)
+    $command | Out-File -Encoding "utf8" -FilePath $wrapper
 
     Write-Output "Wrapper batch script successfully generated to $wrapper"
 }

@@ -1,7 +1,7 @@
 mingw-std-threads
 =================
 
-Implementation of standard C++11 threading classes, which are currently still missing on MinGW GCC.
+An efficient implementation of standard C++11 threading classes for MinGW GCC. MinGW-w64 v3.0.0 (released on 2013-09-20) and above include another (heavier) implementation based on the winpthreads library.
 
 Target Windows version
 ----------------------
@@ -23,7 +23,7 @@ A `CMakeLists.txt` has also been provided. You can add it to your project by usi
 Using "std-like" headers
 ------------------------
 
-Probably you don't really want to replace all your includes from `#include <header>` to `#include "mingw.header.h"`. So if you are using GCC or clang, here are some ways to make you happy :)
+Probably you don't really want to replace all your includes from `#include <header>` to `#include "mingw.header.h"`. So if you are using GCC or Clang, here are some ways to make you happy :)
 
 With CMake, you just need to turn on the option `MINGW_STDTHREADS_GENERATE_STDHEADERS` before adding mingw-stdthreads, something like this:
 ```CMake
@@ -42,16 +42,18 @@ This code has been tested to work with MinGW-w64 5.3.0, but should work with any
 
 Switching from the win32-pthread based implementation
 -----------------------------------------------------
-It seems that recent versions of MinGW-w64 include a Win32 port of pthreads, and have the `std::thread`, `std::mutex`, etc. classes implemented and working based on that compatibility
+This section is only relevant if you are not using CMake or a script to generate headers.
+
+MinGW-w64 v3.0.0 and above include a Win32 port of pthreads, and have the `std::thread`, `std::mutex`, etc. classes implemented and working based on that compatibility
 layer.
 That is a somewhat heavier implementation, as it relies on an abstraction layer, so you may still want to use this implementation for efficiency purposes.
 Unfortunately you can't use this library standalone and independent of the system `<mutex>` headers, as it relies on those headers for `std::unique_lock` and other non-trivial utility classes.
-In that case you will need to edit the `c++-config.h` file of your MinGW setup and comment out the definition of _GLIBCXX_HAS_GTHREADS.
+In that case you will need to edit the `c++-config.h` file of your MinGW setup and comment out the definition of `_GLIBCXX_HAS_GTHREADS`.
 This will cause the system headers not to define the actual `thread`, `mutex`, etc. classes, but still define the necessary utility classes.
 
-Why MinGW has no threading classes 
+Why MinGW has no threading classes
 ----------------------------------
-It seems that for cross-platform threading implementation, the GCC standard library relies on the gthreads/pthreads library.
+The information in this section is outdated with regard to MinGW-w64 v3.0.0 and above. It seems that for cross-platform threading implementation, the GCC standard library relies on the gthreads/pthreads library.
 If this library is not available, as is the case with MinGW, the classes `std::thread`, `std::mutex`, `std::condition_variable` are not defined.
 However, various usable helper classes are still defined in the system headers.
 Hence, this implementation does not re-define them, and instead includes those headers.
