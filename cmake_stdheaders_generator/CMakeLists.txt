@@ -17,15 +17,13 @@ function(generate_mingw_stdthreads_header header_file_name
     endif()
 
     # Call g++ to retrieve header path
-    # The -H option will let g++ outputs header dependencies to stderr
-    set(compiler_arguments 
-        ${template_file_path}
-        -H
-        "-DMINGW_STDTHREADS_DETECTING_SYSTEM_HEADER=<${header_file_name}>")
-    # And content of stderr is saved to variable compiler_output
-    execute_process(COMMAND "${CMAKE_CXX_COMPILER}" ${compiler_arguments}
-        ERROR_VARIABLE compiler_output
-        OUTPUT_QUIET)
+    # The -H option will let g++ outputs header dependencies to stderr, and the
+    # content of stderr is saved to variable compiler_output.
+    try_compile(unused_compiler_exit_code ${CMAKE_CURRENT_BINARY_DIR}
+        "${template_file_path}"
+        COMPILE_DEFINITIONS
+            -H "-DMINGW_STDTHREADS_DETECTING_SYSTEM_HEADER=<${header_file_name}>"
+        OUTPUT_VARIABLE compiler_output)
     
     # Get full path to system header
     string(REGEX MATCH "[.] ([^\r\n]*)" _ "${compiler_output}")
