@@ -431,6 +431,7 @@ public:
 typedef recursive_timed_mutex timed_mutex;
 #endif
 
+#if defined(__GNUC__) && __GNUC__ < 11
 class once_flag
 {
 //    When available, the SRW-based mutexes should be faster than the
@@ -461,6 +462,7 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
     detail::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
 }
+#endif
 } //  Namespace mingw_stdthread
 
 //  Push objects into std, but only if they are not already there.
@@ -471,13 +473,15 @@ namespace std
 //  was none. Direct specification (std::), however, would be unaffected.
 //    Take the safe option, and include only in the presence of MinGW's win32
 //  implementation.
-#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+#if defined(__GNUC__) && defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
 using mingw_stdthread::recursive_mutex;
 using mingw_stdthread::mutex;
 using mingw_stdthread::recursive_timed_mutex;
 using mingw_stdthread::timed_mutex;
+#if __GNUC__ < 11
 using mingw_stdthread::once_flag;
 using mingw_stdthread::call_once;
+#endif
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
 #define MINGW_STDTHREAD_REDUNDANCY_WARNING
 #pragma message "This version of MinGW seems to include a win32 port of\
