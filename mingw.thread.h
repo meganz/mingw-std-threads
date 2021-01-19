@@ -105,6 +105,7 @@ namespace detail
     class ThreadIdTool;
 } //  Namespace "detail"
 
+#if defined(__GNUC__) && __GNUC__ < 11
 class thread
 {
 public:
@@ -317,6 +318,7 @@ namespace this_thread
         sleep_for(sleep_time-Clock::now());
     }
 }
+#endif
 } //  Namespace mingw_stdthread
 
 namespace std
@@ -326,7 +328,8 @@ namespace std
 //  was none. Direct specification (std::), however, would be unaffected.
 //    Take the safe option, and include only in the presence of MinGW's win32
 //  implementation.
-#if defined(__MINGW32__ ) && !defined(_GLIBCXX_HAS_GTHREADS)
+#if defined(__GNUC__) && defined(__MINGW32__) && !defined(_GLIBCXX_HAS_GTHREADS)
+#if __GNUC__ < 11
 using mingw_stdthread::thread;
 //    Remove ambiguity immediately, to avoid problems arising from the above.
 //using std::thread;
@@ -334,6 +337,7 @@ namespace this_thread
 {
 using namespace mingw_stdthread::this_thread;
 }
+#endif
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
 #define MINGW_STDTHREAD_REDUNDANCY_WARNING
 #pragma message "This version of MinGW seems to include a win32 port of\
@@ -344,6 +348,7 @@ using namespace mingw_stdthread::this_thread;
  namespace mingw_stdthread."
 #endif
 
+#if defined(__GNUC__) && __GNUC__ < 11
 //    Specialize hash for this implementation's thread::id, even if the
 //  std::thread::id already has a hash.
 template<>
@@ -356,5 +361,6 @@ struct hash<mingw_stdthread::thread::id>
         return i.mId;
     }
 };
+#endif
 }
 #endif // WIN32STDTHREAD_H
