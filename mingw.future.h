@@ -945,9 +945,13 @@ struct StorageHelper
   template<class Func, class ... Args>
   static void store (FutureState<Ret> * state_ptr, Func && func, Args&&... args)
   {
-    {
-      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
-      store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+    try {
+      auto result = invoke(std::forward<Func>(func), std::forward<Args>(args)...);
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };  //  Reveal the results of the above action to
+      state_ptr->set_value(std::move(result));
+    } catch (...) {
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };  //  Reveal the results of the above action to
+      state_ptr->set_exception(std::current_exception());
     }
     state_ptr->get_condition_variable().notify_all();
   }
@@ -970,9 +974,14 @@ struct StorageHelper<Ref&>
   template<class Func, class ... Args>
   static void store (FutureState<void*> * state_ptr, Func && func, Args&&... args)
   {
-    {
+    try {
+      typedef typename std::remove_cv<Ref>::type Ref_non_cv;
+      Ref & rf = invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
-      store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+      state_ptr->set_value(const_cast<Ref_non_cv *>(std::addressof(rf)));
+    } catch (...) {
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+      state_ptr->set_exception(std::current_exception());
     }
     state_ptr->get_condition_variable().notify_all();
   }
@@ -994,9 +1003,13 @@ struct StorageHelper<void>
   template<class Func, class ... Args>
   static void store (FutureState<Empty> * state_ptr, Func && func, Args&&... args)
   {
-    {
+    try {
+      invoke(std::forward<Func>(func), std::forward<Args>(args)...);
       std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
-      store_deferred(state_ptr, std::forward<Func>(func), std::forward<Args>(args)...);
+      state_ptr->set_value(Empty{});
+    } catch (...) {
+      std::lock_guard<mingw_stdthread::mutex> lock { state_ptr->get_mutex() };
+      state_ptr->set_exception(std::current_exception());
     }
     state_ptr->get_condition_variable().notify_all();
   }
