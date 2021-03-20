@@ -30,15 +30,29 @@ std::shared_mutex sm;
 std::condition_variable cv;
 std::condition_variable_any cv_any;
 
+std::atomic<unsigned long long> failure_count {0};
+template<class ... Args>
+void log_error (char const * fmtString, Args ...args) {
+  ++failure_count;
+   printf("%s", "ERROR: ");
+  printf(fmtString, args...);
+  printf("%s", "\n");
+  fflush(stdout);
+}
+
+
 template<class ... Args>
 void log (char const * fmtString, Args ...args) {
   printf(fmtString, args...);
-  printf("\n");
+  printf("%s", "\n");
   fflush(stdout);
 }
 
 void test_call_once(int a, const char* str)
 {
+    static std::atomic_flag already_run = ATOMIC_FLAG_INIT;
+    if (already_run.test_and_set(std::memory_order_relaxed))
+      log_error("test_call_once was run at least twice.");
     log("test_call_once called with a=%d, str=%s", a, str);
     this_thread::sleep_for(std::chrono::milliseconds(500));
 }
@@ -151,7 +165,7 @@ void test_future ()
 
   try {
     future<T> impossible_future = promise_value.get_future();
-    log("WARNING: Promise failed to detect that its future was already retrieved.");
+    log_error("Promise failed to detect that its future was already retrieved.");
   } catch(...) {
     log("\tPromise successfully prevented redundant future retrieval.");
   }
@@ -160,17 +174,9 @@ void test_future ()
   thread t ([](promise<T> p_value, promise<T> p_exception, promise<T>, promise<T> p_late)
     {
       this_thread::sleep_for(std::chrono::seconds(1));
-      try {
-        throw std::runtime_error("Thrown during the thread.");
-      } catch (...) {
-        p_late.set_exception_at_thread_exit(std::current_exception());
-      }
+      p_late.set_exception_at_thread_exit(std::make_exception_ptr(std::runtime_error("Thrown during the thread.")));
       test_future_set_value(p_value);
-      try {
-        throw std::runtime_error("Things happened as expected.");
-      } catch (...) {
-        p_exception.set_exception(std::current_exception());
-      }
+      p_exception.set_exception(std::make_exception_ptr(std::runtime_error("Things happened as expected.")));
       this_thread::sleep_for(std::chrono::seconds(2));
     },
     std::move(promise_value),
@@ -183,12 +189,12 @@ void test_future ()
     bool was_expected = test_future_get_value(future_value);
     log("\tReceived %sexpected value.", (was_expected ? "" : "un"));
   } catch (...) {
-    log("WARNING: Exception where there should be none!");
+    log_error("Exception where there should be none!");
     throw;
   }
   try {
     test_future_get_value(future_exception);
-    log("WARNING: Got a value where there should be an exception!");
+    log_error("Got a value where there should be an exception!");
   } catch (std::exception & e) {
     log("\tReceived an exception (\"%s\") as expected.", e.what());
   }
@@ -196,49 +202,75 @@ void test_future ()
   log("\tWaiting for the thread to exit...");
   try {
     test_future_get_value(future_late);
-    log("WARNING: Got a value where there should be an exception!");
+    log_error("Got a value where there should be an exception!");
   } catch (std::exception & e) {
     log("\tReceived an exception (\"%s\") as expected.", e.what());
   }
 
   try {
     test_future_get_value(future_broken);
-    log("WARNING: Got a value where there should be an exception!");
+    log_error("Got a value where there should be an exception!");
   } catch (std::future_error & e) {
     log("\tReceived a future_error (\"%s\") as expected.", e.what());
   }
 
-  log("\tDeferring a function...");
-  auto async_deferred = async(launch::deferred, [] (void) -> T
-    {
-      std::hash<std::thread::id> hasher;
-      log("\t\tDeferred function called on thread %zu", hasher(std::this_thread::get_id()));
-      if (!is_void<T>::value)
-        return T(test_int);
-    });
-  log("\tCalling a function asynchronously...");
-  auto async_async = async(launch::async, [] (void) -> T
-    {
-      std::hash<std::thread::id> hasher;
-      log("\t\tAsynchronous function called on thread %zu", hasher(std::this_thread::get_id()));
-      if (!is_void<T>::value)
-        return T(test_int);
-    });
-  log("\tLetting the implementation decide...");
-  auto async_either = async([] (thread::id other_id) -> T
-    {
-      std::hash<thread::id> hasher;
-      log("\t\tFunction called on thread %zu. Implementation chose %s execution.", hasher(this_thread::get_id()), (this_thread::get_id() == other_id) ? "deferred" : "asynchronous");
-      if (!is_void<T>::value)
-        return T(test_int);
-    }, this_thread::get_id());
+  { //  Part 1: Test whether `async` has correct return behavior.
+    log("\tDeferring a function...");
+    auto async_deferred = async(launch::deferred, [] (void) -> T
+      {
+        std::hash<std::thread::id> hasher;
+        log("\t\tDeferred function called on thread %zu", hasher(std::this_thread::get_id()));
+        if (!is_void<T>::value)
+          return T(test_int);
+      });
+    log("\tCalling a function asynchronously...");
+    auto async_async = async(launch::async, [] (void) -> T
+      {
+        std::hash<std::thread::id> hasher;
+        log("\t\tAsynchronous function called on thread %zu", hasher(std::this_thread::get_id()));
+        if (!is_void<T>::value)
+          return T(test_int);
+      });
+    log("\tLetting the implementation decide...");
+    auto async_either = async([] (thread::id other_id) -> T
+      {
+        std::hash<thread::id> hasher;
+        log("\t\tFunction called on thread %zu. Implementation chose %s execution.", hasher(this_thread::get_id()), (this_thread::get_id() == other_id) ? "deferred" : "asynchronous");
+        if (!is_void<T>::value)
+          return T(test_int);
+      }, this_thread::get_id());
 
-  log("\tFetching asynchronous result.");
-  test_future_get_value(async_async);
-  log("\tFetching deferred result.");
-  test_future_get_value(async_deferred);
-  log("\tFetching implementation-defined result.");
-  test_future_get_value(async_either);
+    if (async_deferred.wait_for(std::chrono::milliseconds(50)) != std::future_status::deferred)
+      log_error("Deferred future did not return deferred status.");
+
+    log("\tFetching asynchronous result.");
+    test_future_get_value(async_async);
+    log("\tFetching deferred result.");
+    test_future_get_value(async_deferred);
+    log("\tFetching implementation-defined result.");
+    test_future_get_value(async_either);
+  }
+
+  { //  Part 2: Test waiting
+    log("\tCalling a make-work function asynchronously...");
+    auto async_async = async(launch::async, [] (void) noexcept -> T
+      {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        if (!is_void<T>::value)
+          return T(test_int);
+      });
+
+    unsigned sleep_count = 0;
+    while (async_async.wait_for(std::chrono::milliseconds(50)) == std::future_status::timeout)
+    {
+      ++sleep_count;
+    }
+
+    if (sleep_count < 4)
+      log_error("Number of timeouts (%u) was signficantly less than expected (9).", sleep_count);
+    else
+      log("\tTimed out %u times. Should be close to 9.", sleep_count);
+  }
 
   log("\tTesting async on pointer-to-member-function.");
   struct Helper
@@ -347,7 +379,7 @@ int main()
         {
             if (i_vals_touched[i] != 1)
             {
-                log("FATAL: Threads are not copying arguments!");
+                log_error("Threads are not copying arguments!");
                 return 1;
             }
         }
@@ -391,7 +423,7 @@ int main()
         }
         catch(std::exception& e)
         {
-            printf("EXCEPTION in worker thread: %s\n", e.what());
+            log_error("EXCEPTION in worker thread: %s\n", e.what());
         }
     },
     TestMove("move test"), "test message", -20);
@@ -426,7 +458,7 @@ int main()
     }
     catch(std::exception& e)
     {
-        log("EXCEPTION in main thread: %s", e.what());
+        log_error("EXCEPTION in main thread: %s", e.what());
     }
     once_flag of;
     call_once(of, test_call_once, 1, "test");
@@ -446,5 +478,5 @@ int main()
       allocated_promise.set_value(7);
     }
 
-    return 0;
+    return failure_count.load() != 0;
 }
