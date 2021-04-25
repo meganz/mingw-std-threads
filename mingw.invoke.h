@@ -17,6 +17,8 @@
 #include <utility>      //  For std::forward
 #include <functional>   //  For std::reference_wrapper
 
+#define MINGWSTD
+
 namespace mingw_stdthread
 {
 namespace detail
