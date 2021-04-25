@@ -28,7 +28,7 @@
 #include <memory>
 #include <functional>     //  For std::hash
 
-#include "mingw.thread.h" //  Start new threads, and use invoke.
+#include <thread> //  Start new threads, and use invoke.
 
 //  Mutexes and condition variables are used explicitly.
 #include "mingw.mutex.h"
