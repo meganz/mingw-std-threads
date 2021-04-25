@@ -38,6 +38,22 @@
 #include <exception>		// std::terminate
 #include <iosfwd>		// std::basic_ostream
 #include <tuple>		// std::tuple
+
+#ifdef MINGWSTD
+#if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
+#pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
+ with Microsoft's API. We'll try to work around this, but we can make no\
+ guarantees. This problem does not exist in MinGW-w64."
+#include <windows.h>    //  No further granularity can be expected.
+#else
+#include <synchapi.h>   //  For WaitForSingleObject
+#include <handleapi.h>  //  For CloseHandle, etc.
+#include <sysinfoapi.h> //  For GetNativeSystemInfo
+#include <processthreadsapi.h>  //  For GetCurrentThreadId
+#endif
+#include <process.h>  //  For _beginthreadex
+#endif
+
 #include <bits/functional_hash.h> // std::hash
 #include <bits/invoke.h>	// std::__invoke
 #include <bits/refwrap.h>       // not required, but helpful to users
@@ -48,6 +64,49 @@
 #else
 # include <errno.h>
 # include <bits/functexcept.h>
+#endif
+
+#ifdef MINGWSTD
+namespace detail
+{
+    template<std::size_t...>
+    struct IntSeq {};
+
+    template<std::size_t N, std::size_t... S>
+    struct GenIntSeq : GenIntSeq<N-1, N-1, S...> { };
+
+    template<std::size_t... S>
+    struct GenIntSeq<0, S...> { typedef IntSeq<S...> type; };
+
+//    Use a template specialization to avoid relying on compiler optimization
+//  when determining the parameter integer sequence.
+    template<class Func, class T, typename... Args>
+    class ThreadFuncCall;
+// We can't define the Call struct in the function - the standard forbids template methods in that case
+    template<class Func, std::size_t... S, typename... Args>
+    class ThreadFuncCall<Func, detail::IntSeq<S...>, Args...>
+    {
+        static_assert(sizeof...(S) == sizeof...(Args), "Args must match.");
+        using Tuple = std::tuple<typename std::decay<Args>::type...>;
+        typename std::decay<Func>::type mFunc;
+        Tuple mArgs;
+
+    public:
+        ThreadFuncCall(Func&& aFunc, Args&&... aArgs)
+          : mFunc(std::forward<Func>(aFunc)),
+            mArgs(std::forward<Args>(aArgs)...)
+        {
+        }
+
+        void callFunc()
+        {
+            std::__invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
+        }
+    };
+
+//  Allow construction of threads without exposing implementation.
+    class ThreadIdTool;
+} //  Namespace "detail"
 #endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -74,14 +133,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     using native_handle_type = __gthread_t;
 #else
+#ifdef MINGWSTD
+    typedef HANDLE native_handle_type;
+#else
     using native_handle_type = int;
+#endif
 #endif
 
     /// thread::id
     class id
     {
+#ifdef MINGWSTD
+      DWORD _M_thread = 0;
+#else
       native_handle_type	_M_thread;
+#endif
 
+#ifdef MINGWSTD
+    public:
+      id (void) noexcept = default;
+
+      explicit
+      id(DWORD aId) noexcept : _M_thread(aId){}
+#else
     public:
       id() noexcept : _M_thread() { }
 
@@ -89,9 +163,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       id(native_handle_type __id) : _M_thread(__id) { }
 
     private:
+#endif
       friend class thread;
       friend struct hash<id>;
+#ifdef MINGWSTD
+      friend class detail::ThreadIdTool;
 
+      friend bool
+      operator==(id __x, id __y) noexcept {return __x._M_thread == __y._M_thread; }
+      friend bool
+      operator!=(id __x, id __y) noexcept {return __x._M_thread != __y._M_thread; }
+      friend bool
+      operator< (id __x, id __y) noexcept {return __x._M_thread <  __y._M_thread; }
+      friend bool
+      operator<=(id __x, id __y) noexcept {return __x._M_thread <= __y._M_thread; }
+      friend bool
+      operator> (id __x, id __y) noexcept {return __x._M_thread >  __y._M_thread; }
+      friend bool
+      operator>=(id __x, id __y) noexcept {return __x._M_thread >= __y._M_thread; }
+#else
       friend bool
       operator==(id __x, id __y) noexcept;
 
@@ -102,14 +192,58 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       friend bool
       operator<(id __x, id __y) noexcept;
 #endif
+#endif
 
       template<class _CharT, class _Traits>
-	friend basic_ostream<_CharT, _Traits>&
-	operator<<(basic_ostream<_CharT, _Traits>& __out, id __id);
+      friend basic_ostream<_CharT, _Traits>&
+      operator<<(basic_ostream<_CharT, _Traits>& __out, id __id)
+#ifdef MINGWSTD
+      {
+          if (__id._M_thread == 0)
+          {
+              return __out << "(invalid std::thread::id)";
+          }
+          else
+          {
+              return __out << __id._M_thread;
+          }
+      }
+#else
+      ;
+#endif
     };
 
   private:
+#ifdef MINGWSTD
+    static constexpr HANDLE kInvalidHandle = nullptr;
+    static constexpr DWORD kInfinite = 0xffffffffl;
+    HANDLE mHandle;
+    id _M_id;
+
+    template <class Call>
+    static unsigned __stdcall threadfunc(void* arg)
+    {
+        std::unique_ptr<Call> call(static_cast<Call*>(arg));
+        call->callFunc();
+        return 0;
+    }
+
+    static unsigned int _hardware_concurrency_helper() noexcept
+    {
+        SYSTEM_INFO sysinfo;
+//    This is one of the few functions used by the library which has a nearly-
+//  equivalent function defined in earlier versions of Windows. Include the
+//  workaround, just as a reminder that it does exist.
+#if defined(_WIN32_WINNT) && (_WIN32_WINNT >= 0x0501)
+        ::GetNativeSystemInfo(&sysinfo);
+#else
+        ::GetSystemInfo(&sysinfo);
+#endif
+        return sysinfo.dwNumberOfProcessors;
+    }
+#else
     id				_M_id;
+#endif
 
     // _GLIBCXX_RESOLVE_LIB_DEFECTS
     // 2097.  packaged_task constructors should be constrained
@@ -118,7 +252,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __not_same = __not_<is_same<__remove_cvref_t<_Tp>, thread>>;
 
   public:
+#ifdef MINGWSTD
+    thread(): mHandle(kInvalidHandle), _M_id(){}
+#else
     thread() noexcept = default;
+#endif
 
 #ifdef _GLIBCXX_HAS_GTHREADS
     template<typename _Callable, typename... _Args,
@@ -149,37 +287,144 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     ~thread()
     {
       if (joinable())
+#ifndef NDEBUG
+            std::printf("Error: Must join() or detach() a thread before \
+destroying it.\n");
+#endif
 	std::terminate();
     }
 
+#ifdef MINGWSTD
+    thread(thread&& other)
+    :mHandle(other.mHandle), _M_id(other._M_id)
+    {
+        other.mHandle = kInvalidHandle;
+        other._M_id = id{};
+    }
+
+    thread(const thread &other)=delete;
+#else
     thread(const thread&) = delete;
 
     thread(thread&& __t) noexcept
     { swap(__t); }
+#endif
+
+#ifdef MINGWSTD
+    template<class Func, typename... Args>
+    explicit thread(Func&& func, Args&&... args) : mHandle(), _M_id()
+    {
+        using ArgSequence = typename detail::GenIntSeq<sizeof...(Args)>::type;
+        using Call = detail::ThreadFuncCall<Func, ArgSequence, Args...>;
+        auto call = new Call(
+            std::forward<Func>(func), std::forward<Args>(args)...);
+        unsigned id_receiver;
+        auto int_handle = _beginthreadex(NULL, 0, threadfunc<Call>,
+            static_cast<LPVOID>(call), 0, &id_receiver);
+        if (int_handle == 0)
+        {
+            mHandle = kInvalidHandle;
+            int errnum = errno;
+            delete call;
+//  Note: Should only throw EINVAL, EAGAIN, EACCES
+            throw std::system_error(errnum, std::generic_category());
+        } else {
+            _M_id._M_thread = id_receiver;
+            mHandle = reinterpret_cast<HANDLE>(int_handle);
+        }
+    }
+#endif
 
     thread& operator=(const thread&) = delete;
 
+#ifdef MINGWSTD
+    thread& operator=(thread&& other) noexcept
+#else
     thread& operator=(thread&& __t) noexcept
+#endif
     {
       if (joinable())
-	std::terminate();
+#ifndef NDEBUG
+            std::printf("Error: Must join() or detach() a thread before \
+moving another thread to it.\n");
+#endif
+	  std::terminate();
+#ifdef MINGWSTD
+      swap(std::forward<thread>(other));
+#else
       swap(__t);
+#endif
       return *this;
     }
 
     void
+#ifdef MINGWSTD
+    swap(thread&& other) noexcept
+    {
+        std::swap(mHandle, other.mHandle);
+        std::swap(_M_id._M_thread, other._M_id._M_thread);
+    }
+#else
     swap(thread& __t) noexcept
     { std::swap(_M_id, __t._M_id); }
+#endif
 
+#ifdef MINGWSTD
+    bool
+    joinable() const
+    {return mHandle != kInvalidHandle;}
+#else
     bool
     joinable() const noexcept
     { return !(_M_id == id()); }
+#endif
+
+
+//    Note: Due to lack of synchronization, this function has a race condition
+//  if called concurrently, which leads to undefined behavior. The same applies
+//  to all other member functions of this class, but this one is mentioned
+//  explicitly.
 
     void
-    join();
+    join()
+#ifdef MINGWSTD
+    {
+        using namespace std;
+        if (get_id() == id(GetCurrentThreadId()))
+            throw system_error(make_error_code(errc::resource_deadlock_would_occur));
+        if (mHandle == kInvalidHandle)
+            throw system_error(make_error_code(errc::no_such_process));
+        if (!joinable())
+            throw system_error(make_error_code(errc::invalid_argument));
+        WaitForSingleObject(mHandle, kInfinite);
+        CloseHandle(mHandle);
+        mHandle = kInvalidHandle;
+        _M_id = id{};
+    }
+#else
+    ;
+#endif
+
 
     void
-    detach();
+    detach()
+#ifdef MINGWSTD
+    {
+        if (!joinable())
+        {
+            using namespace std;
+            throw system_error(make_error_code(errc::invalid_argument));
+        }
+        if (mHandle != kInvalidHandle)
+        {
+            CloseHandle(mHandle);
+            mHandle = kInvalidHandle;
+        }
+        _M_id = id{};
+    }
+#else
+    ;
+#endif
 
     id
     get_id() const noexcept
@@ -189,11 +434,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      */
     native_handle_type
     native_handle()
+#ifdef MINGWSTD
+    const { return mHandle; }
+#else
     { return _M_id._M_thread; }
+#endif
 
     // Returns a value that hints at the number of hardware thread contexts.
     static unsigned int
-    hardware_concurrency() noexcept;
+    hardware_concurrency() noexcept
+#ifdef MINGWSTD
+    {
+        static unsigned int cached = _hardware_concurrency_helper();
+        return cached;
+    }
+#else
+    ;
+#endif
 
 #ifdef _GLIBCXX_HAS_GTHREADS
   private:
@@ -267,6 +524,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif // _GLIBCXX_HAS_GTHREADS
   };
 
+#ifndef MINGWSTD
 #ifndef _GLIBCXX_HAS_GTHREADS
   inline void thread::join() { std::__throw_system_error(EINVAL); }
   inline void thread::detach() { std::__throw_system_error(EINVAL); }
@@ -274,8 +532,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
 
   inline void
-  swap(thread& __x, thread& __y) noexcept
-  { __x.swap(__y); }
+  swap(thread&& __x, thread&& __y) noexcept
+  { __x.swap((thread)__y); }
 
   inline bool
   operator==(thread::id __x, thread::id __y) noexcept
@@ -286,6 +544,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     // single-threaded programs using GNU libc). Assume EqualityComparable.
     return __x._M_thread == __y._M_thread;
   }
+#endif
 
   // N.B. other comparison operators are defined in <thread>
 
@@ -295,10 +554,30 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     struct hash<thread::id>
     : public __hash_base<size_t, thread::id>
     {
+/*#ifdef MINGWSTD
+      typedef thread::id argument_type;
+      typedef size_t result_type;
+      size_t
+      operator()(const argument_type& __id) const noexcept
+      { return __id._M_thread; }
+#else*/
       size_t
       operator()(const thread::id& __id) const noexcept
       { return std::_Hash_impl::hash(__id._M_thread); }
+//#endif
     };
+
+namespace detail
+{
+    class ThreadIdTool
+    {
+    public:
+        static thread::id make_id (DWORD base_id) noexcept
+        {
+            return thread::id(base_id);
+        }
+    };
+} //  Namespace "detail"
 
   namespace this_thread
   {
@@ -310,6 +589,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return thread::id(1);
 #elif defined _GLIBCXX_NATIVE_THREAD_ID
       return thread::id(_GLIBCXX_NATIVE_THREAD_ID);
+#elif defined MINGWSTD
+      return detail::ThreadIdTool::make_id(GetCurrentThreadId());
 #else
       return thread::id(__gthread_self());
 #endif
@@ -322,8 +603,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if defined _GLIBCXX_HAS_GTHREADS && defined _GLIBCXX_USE_SCHED_YIELD
       __gthread_yield();
 #endif
+#ifdef MINGWSTD
+      Sleep(0);
+#endif
     }
-
+#ifdef MINGWSTD
+    /*template< class Rep, class Period >
+    void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
+    {
+        static constexpr DWORD kInfinite = 0xffffffffl;
+        using namespace std::chrono;
+        using rep = milliseconds::rep;
+        rep ms = duration_cast<milliseconds>(sleep_duration).count();
+        while (ms > 0)
+        {
+            constexpr rep kMaxRep = static_cast<rep>(kInfinite - 1);
+            auto sleepTime = (ms < kMaxRep) ? ms : kMaxRep;
+            Sleep(static_cast<DWORD>(sleepTime));
+            ms -= sleepTime;
+        }
+    }*/
+    /*template <class Clock, class Duration>
+    void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)
+    {
+        sleep_for(sleep_time-Clock::now());
+    }*/
+#endif
   } // namespace this_thread
 
   /// @}
