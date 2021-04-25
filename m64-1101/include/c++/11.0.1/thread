@@ -41,7 +41,9 @@
 #endif
 
 #include <bits/std_thread.h> // std::thread, get_id, yield
+#ifndef MINGWSTD
 #include <bits/this_thread_sleep.h> // std::this_thread::sleep_for, sleep_until
+#endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -56,7 +58,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    */
 
   // std::thread is defined in <bits/std_thread.h>
-
 #ifndef MINGWSTD
 #if __cpp_lib_three_way_comparison
   inline strong_ordering
