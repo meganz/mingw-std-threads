@@ -39,6 +39,8 @@
 #include <iosfwd>		// std::basic_ostream
 #include <tuple>		// std::tuple
 
+#include <bits/mingw.invoke.h>
+
 #ifdef MINGWSTD
 #include <cstddef>      //  For std::size_t
 #include <cerrno>       //  Detect error type.
@@ -50,8 +52,6 @@
 #include <memory>       //  For std::unique_ptr
 #include <iosfwd>       //  Stream output for thread ids.
 #include <utility>      //  For std::swap, std::forward
-
-#include "mingw.invoke.h"
 
 #if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
 #pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
