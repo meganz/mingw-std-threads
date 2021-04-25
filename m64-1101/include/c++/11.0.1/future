@@ -39,6 +39,7 @@
 #include <condition_variable> // __at_thread_exit_elt
 #include <system_error>
 #include <atomic>
+#include <bits/mingw.future.h>
 #include <bits/allocated_ptr.h>
 #include <bits/atomic_futex.h>
 #include <bits/invoke.h>
