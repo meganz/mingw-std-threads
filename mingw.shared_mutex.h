@@ -51,7 +51,7 @@
 //  For defer_lock_t, adopt_lock_t, and try_to_lock_t
 #include "mingw.mutex.h"
 //  For this_thread::yield.
-//#include "mingw.thread.h"
+//#include <thread>
 
 //  Might be able to use native Slim Reader-Writer (SRW) locks.
 #ifdef _WIN32
