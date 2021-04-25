@@ -675,6 +675,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   {
     constexpr once_flag() noexcept = default;
 
+#ifdef MINGWSTD
+#if (_WIN32_WINNT == _WIN32_WINNT_VISTA)
+    windows7::mutex mMutex;
+#else
+    mutex mMutex;
+#endif
+    std::atomic_bool mHasRun;
+#endif
     /// Deleted copy constructor
     once_flag(const once_flag&) = delete;
     /// Deleted assignment operator
@@ -690,6 +698,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     template<typename _Callable, typename... _Args>
       friend void
       call_once(once_flag& __once, _Callable&& __f, _Args&&... __args);
+#ifdef MINGWSTD
+  public:
+      constexpr once_flag() noexcept: mMutex(), mHasRun(false) {}
+#endif
   };
 
   /// @cond undocumented
@@ -771,10 +783,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void
     call_once(once_flag& __once, _Callable&& __f, _Args&&... __args)
     {
+#ifdef MINGWSTD
+      if (flag.mHasRun.load(std::memory_order_acquire))
+        return;
+      lock_guard<decltype(flag.mMutex)> lock(flag.mMutex);
+      if (flag.mHasRun.load(std::memory_order_acquire))
+        return;
+#endif
+
       // Closure type that runs the function
       auto __callable = [&] {
 	  std::__invoke(std::forward<_Callable>(__f),
 			std::forward<_Args>(__args)...);
+#ifdef MINGWSTD
+      flag.mHasRun.store(true, std::memory_order_release);
+#endif
       };
 
       once_flag::_Prepare_execution __exec(__callable);
