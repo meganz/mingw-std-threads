@@ -545,8 +545,8 @@ moving another thread to it.\n");
 #endif
 
   inline void
-  swap(thread&& __x, thread&& __y) noexcept
-  { __x.swap((thread)__y); }
+  swap(thread& __x, thread& __y) noexcept
+  { __x.swap(__y); }
 
   inline bool
   operator==(thread::id __x, thread::id __y) noexcept
