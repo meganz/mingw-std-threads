@@ -37,6 +37,7 @@
 
 #include <chrono>
 
+#include <bits/mingw.condition_variable.h>
 #include <bits/std_mutex.h>
 #include <bits/unique_lock.h>
 #include <bits/alloc_traits.h>
