@@ -431,7 +431,7 @@ public:
 typedef recursive_timed_mutex timed_mutex;
 #endif
 
-class once_flag
+/*class once_flag
 {
 //    When available, the SRW-based mutexes should be faster than the
 //  CriticalSection-based mutexes. Only try_lock will be unavailable in Vista,
@@ -448,9 +448,9 @@ class once_flag
     friend void call_once(once_flag& once, Callable&& f, Args&&... args);
 public:
     constexpr once_flag() noexcept: mMutex(), mHasRun(false) {}
-};
+};*/
 
-template<class Callable, class... Args>
+/*template<class Callable, class... Args>
 void call_once(once_flag& flag, Callable&& func, Args&&... args)
 {
     if (flag.mHasRun.load(std::memory_order_acquire))
@@ -460,7 +460,7 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
         return;
     detail::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
-}
+}*/
 } //  Namespace mingw_stdthread
 
 //  Push objects into std, but only if they are not already there.
@@ -476,8 +476,8 @@ using mingw_stdthread::recursive_mutex;
 using mingw_stdthread::mutex;
 using mingw_stdthread::recursive_timed_mutex;
 using mingw_stdthread::timed_mutex;
-using mingw_stdthread::once_flag;
-using mingw_stdthread::call_once;
+using std::once_flag;
+using std::call_once;
 #elif !defined(MINGW_STDTHREAD_REDUNDANCY_WARNING)  //  Skip repetition
 #define MINGW_STDTHREAD_REDUNDANCY_WARNING
 #pragma message "This version of MinGW seems to include a win32 port of\
