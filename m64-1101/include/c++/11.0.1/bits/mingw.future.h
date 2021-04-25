@@ -92,7 +92,7 @@ struct FutureStatic
   }
 };
 template<bool b>
-std::vector<std::pair<mutex, condition_variable> > FutureStatic<b>::sync_pool (thread::hardware_concurrency() * 2 + 1);
+std::vector<std::pair<mutex, condition_variable> > FutureStatic<b>::sync_pool (std::thread::hardware_concurrency() * 2 + 1);
 
 struct FutureStateBase
 {
@@ -508,7 +508,7 @@ class promise : mingw_stdthread::detail::FutureBase
     bool handle_handled = false;
     try {
       state_type * ptr = static_cast<state_type *>(mState);
-      mingw_stdthread::thread watcher_thread ([ptr, thread_handle, &handle_handled](void)
+      std::thread watcher_thread ([ptr, thread_handle, &handle_handled](void)
         {
           {
             std::lock_guard<mingw_stdthread::mutex> guard (ptr->get_mutex());
@@ -1078,7 +1078,7 @@ std::future<__async_result_of<Function, Args...> >
     state_ptr = new state_type ();
     state_ptr->increment_references();
     std::unique_ptr<state_type, decltype(deleter)> ooptr { state_ptr, deleter };
-    mingw_stdthread::thread t ([](decltype(ooptr) ptr, typename std::decay<Function>::type f2, typename std::decay<Args>::type... args2)
+    std::thread t ([](decltype(ooptr) ptr, typename std::decay<Function>::type f2, typename std::decay<Args>::type... args2)
       {
         typedef mingw_stdthread::detail::StorageHelper<result_type> s_helper;
         s_helper::store(ptr.get(), f2, args2...);
