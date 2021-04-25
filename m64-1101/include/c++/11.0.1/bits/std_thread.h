@@ -40,6 +40,19 @@
 #include <tuple>		// std::tuple
 
 #ifdef MINGWSTD
+#include <cstddef>      //  For std::size_t
+#include <cerrno>       //  Detect error type.
+#include <exception>    //  For std::terminate
+#include <system_error> //  For std::system_error
+#include <functional>   //  For std::hash
+#include <tuple>        //  For std::tuple
+#include <chrono>       //  For sleep timing.
+#include <memory>       //  For std::unique_ptr
+#include <iosfwd>       //  Stream output for thread ids.
+#include <utility>      //  For std::swap, std::forward
+
+#include "mingw.invoke.h"
+
 #if (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR))
 #pragma message "The Windows API that MinGW-w32 provides is not fully compatible\
  with Microsoft's API. We'll try to work around this, but we can make no\
