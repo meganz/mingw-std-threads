@@ -608,7 +608,7 @@ namespace detail
 #endif
     }
 #ifdef MINGWSTD
-    /*template< class Rep, class Period >
+    template< class Rep, class Period >
     void sleep_for( const std::chrono::duration<Rep,Period>& sleep_duration)
     {
         static constexpr DWORD kInfinite = 0xffffffffl;
@@ -622,12 +622,12 @@ namespace detail
             Sleep(static_cast<DWORD>(sleepTime));
             ms -= sleepTime;
         }
-    }*/
-    /*template <class Clock, class Duration>
+    }
+    template <class Clock, class Duration>
     void sleep_until(const std::chrono::time_point<Clock,Duration>& sleep_time)
     {
         sleep_for(sleep_time-Clock::now());
-    }*/
+    }
 #endif
   } // namespace this_thread
 
