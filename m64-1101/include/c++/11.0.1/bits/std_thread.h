@@ -174,9 +174,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       explicit
       id(native_handle_type __id) : _M_thread(__id) { }
+#endif
 
     private:
-#endif
       friend class thread;
       friend struct hash<id>;
 #ifdef MINGWSTD
