@@ -39,6 +39,18 @@
 #include <iosfwd>		// std::basic_ostream
 #include <tuple>		// std::tuple
 
+#include <bits/functional_hash.h> // std::hash
+#include <bits/invoke.h>	// std::__invoke
+#include <bits/refwrap.h>       // not required, but helpful to users
+#include <bits/unique_ptr.h>	// std::unique_ptr
+
+#ifdef _GLIBCXX_HAS_GTHREADS
+# include <bits/gthr.h>
+#else
+# include <errno.h>
+# include <bits/functexcept.h>
+#endif
+
 #include <bits/mingw.invoke.h>
 
 #ifdef MINGWSTD
@@ -65,21 +77,15 @@
 #include <processthreadsapi.h>  //  For GetCurrentThreadId
 #endif
 #include <process.h>  //  For _beginthreadex
+
+#ifndef NDEBUG
+#include <cstdio>
 #endif
 
-#include <bits/functional_hash.h> // std::hash
-#include <bits/invoke.h>	// std::__invoke
-#include <bits/refwrap.h>       // not required, but helpful to users
-#include <bits/unique_ptr.h>	// std::unique_ptr
-
-#ifdef _GLIBCXX_HAS_GTHREADS
-# include <bits/gthr.h>
-#else
-# include <errno.h>
-# include <bits/functexcept.h>
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
+#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
 #endif
 
-#ifdef MINGWSTD
 namespace detail
 {
     template<std::size_t...>
@@ -113,7 +119,7 @@ namespace detail
 
         void callFunc()
         {
-            std::__invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
+            mingw_stdthread::detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
         }
     };
 
@@ -158,29 +164,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
 #ifdef MINGWSTD
       DWORD _M_thread = 0;
-#else
-      native_handle_type	_M_thread;
-#endif
+      friend class thread;
+      friend struct hash<id>;
+      friend class detail::ThreadIdTool;
 
-#ifdef MINGWSTD
     public:
       id (void) noexcept = default;
 
       explicit
       id(DWORD aId) noexcept : _M_thread(aId){}
-#else
-    public:
-      id() noexcept : _M_thread() { }
-
-      explicit
-      id(native_handle_type __id) : _M_thread(__id) { }
-#endif
-
-    private:
-      friend class thread;
-      friend struct hash<id>;
-#ifdef MINGWSTD
-      friend class detail::ThreadIdTool;
 
       friend bool
       operator==(id __x, id __y) noexcept {return __x._M_thread == __y._M_thread; }
@@ -195,6 +187,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       friend bool
       operator>=(id __x, id __y) noexcept {return __x._M_thread >= __y._M_thread; }
 #else
+      native_handle_type	_M_thread;
+
+    public:
+      id() noexcept : _M_thread() { }
+
+      explicit
+      id(native_handle_type __id) : _M_thread(__id) { }
+
+    private:
+      friend class thread;
+      friend struct hash<id>;
+
       friend bool
       operator==(id __x, id __y) noexcept;
 
@@ -537,7 +541,19 @@ moving another thread to it.\n");
 #endif // _GLIBCXX_HAS_GTHREADS
   };
 
-#ifndef MINGWSTD
+#ifdef MINGWSTD
+namespace detail
+{
+    class ThreadIdTool
+    {
+    public:
+        static thread::id make_id (DWORD base_id) noexcept
+        {
+            return thread::id(base_id);
+        }
+    };
+} //  Namespace "detail"
+#else
 #ifndef _GLIBCXX_HAS_GTHREADS
   inline void thread::join() { std::__throw_system_error(EINVAL); }
   inline void thread::detach() { std::__throw_system_error(EINVAL); }
@@ -579,18 +595,6 @@ moving another thread to it.\n");
       { return std::_Hash_impl::hash(__id._M_thread); }
 //#endif
     };
-
-namespace detail
-{
-    class ThreadIdTool
-    {
-    public:
-        static thread::id make_id (DWORD base_id) noexcept
-        {
-            return thread::id(base_id);
-        }
-    };
-} //  Namespace "detail"
 
   namespace this_thread
   {
