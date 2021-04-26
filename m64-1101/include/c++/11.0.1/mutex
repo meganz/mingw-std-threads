@@ -795,10 +795,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       auto __callable = [&] {
 	  std::__invoke(std::forward<_Callable>(__f),
 			std::forward<_Args>(__args)...);
+      };
 #ifdef MINGWSTD
       flag.mHasRun.store(true, std::memory_order_release);
 #endif
-      };
 
       once_flag::_Prepare_execution __exec(__callable);
 
