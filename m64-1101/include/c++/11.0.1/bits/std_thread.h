@@ -86,6 +86,8 @@
 #error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
 #endif
 
+namespace mingw_stdthread
+{
 namespace detail
 {
     template<std::size_t...>
@@ -119,13 +121,14 @@ namespace detail
 
         void callFunc()
         {
-            mingw_stdthread::detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
+            detail::invoke(std::move(mFunc), std::move(std::get<S>(mArgs)) ...);
         }
     };
 
 //  Allow construction of threads without exposing implementation.
     class ThreadIdTool;
 } //  Namespace "detail"
+}
 #endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -165,8 +168,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #ifdef MINGWSTD
       DWORD _M_thread = 0;
       friend class thread;
-      friend struct hash<id>;
-      friend class detail::ThreadIdTool;
+      friend class hash<id>;
+      friend class mingw_stdthread::detail::ThreadIdTool;
 
     public:
       id (void) noexcept = default;
@@ -331,8 +334,8 @@ destroying it.\n");
     template<class Func, typename... Args>
     explicit thread(Func&& func, Args&&... args) : mHandle(), _M_id()
     {
-        using ArgSequence = typename detail::GenIntSeq<sizeof...(Args)>::type;
-        using Call = detail::ThreadFuncCall<Func, ArgSequence, Args...>;
+        using ArgSequence = typename mingw_stdthread::detail::GenIntSeq<sizeof...(Args)>::type;
+        using Call = mingw_stdthread::detail::ThreadFuncCall<Func, ArgSequence, Args...>;
         auto call = new Call(
             std::forward<Func>(func), std::forward<Args>(args)...);
         unsigned id_receiver;
@@ -542,6 +545,8 @@ moving another thread to it.\n");
   };
 
 #ifdef MINGWSTD
+//namespace mingw_stdthread
+//{
 namespace detail
 {
     class ThreadIdTool
@@ -553,6 +558,7 @@ namespace detail
         }
     };
 } //  Namespace "detail"
+//}
 #else
 #ifndef _GLIBCXX_HAS_GTHREADS
   inline void thread::join() { std::__throw_system_error(EINVAL); }
@@ -581,19 +587,22 @@ namespace detail
   /// std::hash specialization for thread::id.
   template<>
     struct hash<thread::id>
+//#ifndef MINGWSTD
     : public __hash_base<size_t, thread::id>
+//#endif
     {
-/*#ifdef MINGWSTD
+#ifdef MINGWSTD
       typedef thread::id argument_type;
       typedef size_t result_type;
       size_t
       operator()(const argument_type& __id) const noexcept
-      { return __id._M_thread; }
-#else*/
+      //{ return __id._M_thread; }
+      { return std::_Hash_impl::hash(__id._M_thread); }
+#else
       size_t
       operator()(const thread::id& __id) const noexcept
       { return std::_Hash_impl::hash(__id._M_thread); }
-//#endif
+#endif
     };
 
   namespace this_thread
