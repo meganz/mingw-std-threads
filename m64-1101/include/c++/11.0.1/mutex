@@ -789,18 +789,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       lock_guard<decltype(flag.mMutex)> lock(flag.mMutex);
       if (flag.mHasRun.load(std::memory_order_acquire))
         return;
-#endif
-
+      auto __callable = [&] {
+      mingw_stdthread::detail::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
+      };
+#else
       // Closure type that runs the function
       auto __callable = [&] {
 	  std::__invoke(std::forward<_Callable>(__f),
 			std::forward<_Args>(__args)...);
       };
+#endif
 #ifdef MINGWSTD
       flag.mHasRun.store(true, std::memory_order_release);
-#endif
-
+//#else
       once_flag::_Prepare_execution __exec(__callable);
+#endif
 
       // XXX pthread_once does not reset the flag if an exception is thrown.
       if (int __e = __gthread_once(&__once._M_once, &__once_proxy))
@@ -913,4 +916,4 @@ _GLIBCXX_END_NAMESPACE_VERSION
 
 #endif // C++11
 
-#endif // _GLIBCXX_MUTEX
+#endif // _GLIBCXX_MUTEX 
