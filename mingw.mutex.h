@@ -159,10 +159,12 @@ struct _OwnerThread
 //  Windows 7, implementing partial functionality in Vista will simplify the
 //  interaction with condition variables.
 
-//Define SRWLOCK_INIT and RTL_SRWLOCK_INIT.
+//Define SRWLOCK_INIT.
  
-#define SRWLOCK_INIT RTL_SRWLOCK_INIT
-#define RTL_SRWLOCK_INIT 0
+#if !defined(SRWLOCK_INIT)
+#pragma message "SRWLOCK_INIT variable is not defined. Defining automatically."
+#define SRWLOCK_INIT {0}
+#endif
  
 #if defined(_WIN32) && (WINVER >= _WIN32_WINNT_VISTA)
 namespace windows7
