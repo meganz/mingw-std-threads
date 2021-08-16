@@ -162,7 +162,7 @@ struct _OwnerThread
 //Define SRWLOCK_INIT.
  
 #if !defined(SRWLOCK_INIT)
-#pragma message "SRWLOCK_INIT variable is not defined. Defining automatically."
+#pragma message "SRWLOCK_INIT macro is not defined. Defining automatically."
 #define SRWLOCK_INIT {0}
 #endif
  
