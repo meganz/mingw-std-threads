@@ -42,8 +42,10 @@ This code has been tested to work with MinGW-w64 5.3.0, but should work with any
 
 Switching from the win32-pthread based implementation
 -----------------------------------------------------
-It seems that recent versions of MinGW-w64 include a Win32 port of pthreads, and have the `std::thread`, `std::mutex`, etc. classes implemented and working based on that compatibility
-layer.
+It seems that recent versions of MinGW-w64 include a Win32 port of pthreads, and have the `std::thread`, `std::mutex`, etc. classes implemented and working based on that compatibility layer.
+
+You could use the built-in pthread implementation of Mingw by using the posix compiler, eg: `x86_64-w64-mingw32-g++-posix` (for Windows 64-bit).
+
 That is a somewhat heavier implementation, as it relies on an abstraction layer, so you may still want to use this implementation for efficiency purposes.
 Unfortunately you can't use this library standalone and independent of the system `<mutex>` headers, as it relies on those headers for `std::unique_lock` and other non-trivial utility classes.
 In that case you will need to edit the `c++-config.h` file of your MinGW setup and comment out the definition of _GLIBCXX_HAS_GTHREADS.
