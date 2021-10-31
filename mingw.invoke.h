@@ -21,17 +21,24 @@ namespace mingw_stdthread
 {
 namespace detail
 {
-//  For compatibility, implement std::invoke for C++11 and C++14
-#if __cplusplus < 201703L
   template<bool PMemFunc, bool PMemData>
   struct Invoker
   {
     template<class F, class... Args>
+#if __cplusplus >= 201703L
+    inline static typename std::invoke_result<F, Args...>::type invoke (F&& f, Args&&... args)
+#else
     inline static typename std::result_of<F(Args...)>::type invoke (F&& f, Args&&... args)
+#endif
     {
+#if __cplusplus >= 201703L
+      return std::__invoke(std::forward<F>(f), std::forward<Args>(args)...);
+#else
       return std::forward<F>(f)(std::forward<Args>(args)...);
+#endif
     }
   };
+
   template<bool>
   struct InvokerHelper;
 
@@ -39,9 +46,10 @@ namespace detail
   struct InvokerHelper<false>
   {
     template<class T1>
-    inline static auto get (T1&& t1) -> decltype(*std::forward<T1>(t1))
+    inline static auto get (T1&& t1) ->\
+     decltype(std::forward<T1>(t1))
     {
-      return *std::forward<T1>(t1);
+      return std::forward<T1>(t1);
     }
 
     template<class T1>
@@ -55,7 +63,8 @@ namespace detail
   struct InvokerHelper<true>
   {
     template<class T1>
-    inline static auto get (T1&& t1) -> decltype(std::forward<T1>(t1))
+    inline static auto get (T1&& t1) ->\
+     decltype(std::forward<T1>(t1))
     {
       return std::forward<T1>(t1);
     }
@@ -89,20 +98,19 @@ namespace detail
     typedef Invoker<std::is_member_function_pointer<typename std::remove_reference<F>::type>::value,
                     std::is_member_object_pointer<typename std::remove_reference<F>::type>::value &&
                     (sizeof...(Args) == 1)> invoker;
-    inline static auto invoke (F&& f, Args&&... args) -> decltype(invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...))
+    inline static auto invoke (F&& f, Args&&... args) ->\
+     decltype(invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...))
     {
       return invoker::invoke(std::forward<F>(f), std::forward<Args>(args)...);
     }
   };
 
   template<class F, class...Args>
-  auto invoke (F&& f, Args&&... args) -> decltype(InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...))
+  auto invoke (F&& f, Args&&... args) ->\
+   decltype(InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...))
   {
     return InvokeResult<F, Args...>::invoke(std::forward<F>(f), std::forward<Args>(args)...);
   }
-#else
-    using std::invoke;
-#endif
 } //  Namespace "detail"
 } //  Namespace "mingw_stdthread"
 
