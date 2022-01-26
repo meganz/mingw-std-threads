@@ -403,6 +403,7 @@ public:
 class timed_mutex: recursive_timed_mutex
 {
 public:
+    timed_mutex() = default;
     timed_mutex(const timed_mutex&) = delete;
     timed_mutex& operator=(const timed_mutex&) = delete;
     void lock()
