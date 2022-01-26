@@ -403,6 +403,7 @@ public:
 class timed_mutex: recursive_timed_mutex
 {
 public:
+    timed_mutex() = default;
     timed_mutex(const timed_mutex&) = delete;
     timed_mutex& operator=(const timed_mutex&) = delete;
     void lock()
@@ -464,7 +465,7 @@ void call_once(once_flag& flag, Callable&& func, Args&&... args)
     if (flag.mHasRun.load(std::memory_order_acquire))
         return;
     lock_guard<decltype(flag.mMutex)> lock(flag.mMutex);
-    if (flag.mHasRun.load(std::memory_order_acquire))
+    if (flag.mHasRun.load(std::memory_order_relaxed))
         return;
     detail::invoke(std::forward<Callable>(func),std::forward<Args>(args)...);
     flag.mHasRun.store(true, std::memory_order_release);
