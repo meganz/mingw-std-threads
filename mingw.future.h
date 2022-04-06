@@ -70,12 +70,12 @@ struct FutureStatic
   enum Type : uint_fast8_t
   {
     kUndecided = 0x00,
-    kDeferred = 0x05,
-    kValue = 0x02,
-    kException = 0x03,
-    kSetFlag = 0x02,
-    kTypeMask = 0x03,
-    kReadyFlag = 0x04
+    kValueFlag = 0x01,
+    kExceptionFlag = 0x02,
+    kDeferredFlag = 0x04, //  Needs special handling. Must not wait.
+    kReadyFlag = 0x10,    //  Results are ready for consumption
+    kTypeMask = 0x07,
+    kNoWaitMask = 0x14    //  Indicates that waits should immediately exit.
   };
 
   static std::vector<std::pair<mutex, condition_variable> > sync_pool;
@@ -188,10 +188,10 @@ struct FutureBase : public FutureStatic<true>
 #endif
 //    If there's already a value or exception, don't do any extraneous
 //  synchronization. The `get()` method will do that for us.
-    if (mState->mType.load(std::memory_order_relaxed) & kReadyFlag)
+    if (mState->mType.load(std::memory_order_relaxed) & Type::kNoWaitMask)
       return;
     get_condition_variable().wait(lock, [this](void)->bool {
-      return mState->mType.load(std::memory_order_relaxed) & kReadyFlag;
+      return mState->mType.load(std::memory_order_relaxed) & Type::kNoWaitMask;
     });
   }
 
@@ -203,12 +203,12 @@ struct FutureBase : public FutureStatic<true>
       throw future_error(future_errc::no_state);
 #endif
     auto current_state = mState->mType.load(std::memory_order_relaxed);
-    if (current_state & kReadyFlag)
-      return (current_state == kDeferred) ? future_status::deferred : future_status::ready;
+    if (current_state & Type::kNoWaitMask)
+      return (current_state & Type::kDeferredFlag) ? future_status::deferred : future_status::ready;
     std::unique_lock<mutex> lock { get_mutex() };
     if (get_condition_variable().wait_for(lock, dur,
           [this](void)->bool {
-            return mState->mType.load(std::memory_order_relaxed) & kReadyFlag;
+            return mState->mType.load(std::memory_order_relaxed) & Type::kNoWaitMask;
           }))
       return future_status::ready;
     else
@@ -240,7 +240,7 @@ struct FutureState : public FutureStateBase
   }
 
   FutureState (std::function<void(void)> && deferred_function)
-    : FutureStateBase(Type::kDeferred), mFunction(std::move(deferred_function))
+    : FutureStateBase(Type::kDeferredFlag), mFunction(std::move(deferred_function))
   {
   }
 
@@ -252,47 +252,49 @@ struct FutureState : public FutureStateBase
   template<class Arg>
   void set_value (Arg && arg)
   {
-    assert(!(mType.load(std::memory_order_relaxed) & Type::kSetFlag));
+    assert(!(mType.load(std::memory_order_relaxed) & Type::kReadyFlag));
     new(&mObject) T (std::forward<Arg>(arg));
-    mType.store(Type::kValue | Type::kReadyFlag, std::memory_order_release);
+    mType.store(Type::kValueFlag | Type::kReadyFlag, std::memory_order_release);
   }
   template<class Arg>
   void set_exception (Arg && arg)
   {
-    assert(!(mType.load(std::memory_order_relaxed) & Type::kSetFlag));
+    assert(!(mType.load(std::memory_order_relaxed) & Type::kReadyFlag));
     new(&mException) std::exception_ptr (std::forward<Arg>(arg));
-    mType.store(Type::kException | Type::kReadyFlag, std::memory_order_release);
+    mType.store(Type::kExceptionFlag | Type::kReadyFlag, std::memory_order_release);
   }
 //  These overloads set value/exception, but don't make it ready.
   template<class Arg>
   void set_value (Arg && arg, bool)
   {
-    assert(!(mType.load(std::memory_order_relaxed) & Type::kSetFlag));
+    assert(!(mType.load(std::memory_order_relaxed) & Type::kReadyFlag));
     new(&mObject) T (std::forward<Arg>(arg));
-    mType.store(Type::kValue, std::memory_order_release);
+    mType.store(Type::kValueFlag, std::memory_order_release);
   }
   template<class Arg>
   void set_exception (Arg && arg, bool)
   {
-    assert(!(mType.load(std::memory_order_relaxed) & Type::kSetFlag));
+    assert(!(mType.load(std::memory_order_relaxed) & Type::kReadyFlag));
     new(&mException) std::exception_ptr (std::forward<Arg>(arg));
-    mType.store(Type::kException, std::memory_order_release);
+    mType.store(Type::kExceptionFlag, std::memory_order_release);
   }
  //private:
   ~FutureState (void)
   {
-    switch (mType.load(std::memory_order_acquire) & Type::kTypeMask)
+    auto type = mType.load(std::memory_order_acquire);
+    switch (type & Type::kTypeMask)
     {
-    case Type::kDeferred & Type::kTypeMask:
+    case Type::kDeferredFlag:
       mFunction.~function();
       break;
-    case Type::kValue:
+    case Type::kValueFlag:
       mObject.~T();
       break;
-    case Type::kException:
+    case Type::kExceptionFlag:
       mException.~exception_ptr();
       break;
-    default:;
+    default:
+      assert(type == Type::kUndecided);
     }
   }
 };
@@ -386,11 +388,12 @@ class future : mingw_stdthread::detail::FutureBase
   T const & get (void) const
   {
     wait();
-    if (mState->mType.load(std::memory_order_acquire) == (kValue | kReadyFlag))
+    auto type = mState->mType.load(std::memory_order_acquire);
+    if (type == (Type::kValueFlag | Type::kReadyFlag))
       return static_cast<state_type *>(mState)->mObject;
     else
     {
-      assert(mState->mType.load(std::memory_order_relaxed) == (kException | kReadyFlag));
+      assert(type == (Type::kExceptionFlag | Type::kReadyFlag));
       std::rethrow_exception(static_cast<state_type *>(mState)->mException);
     }
   }
@@ -399,14 +402,18 @@ class future : mingw_stdthread::detail::FutureBase
 
   void wait (void) const
   {
+    auto state = mState->mType.load(std::memory_order_relaxed);
+    if (state & Type::kReadyFlag)
+      return;
     std::unique_lock<mingw_stdthread::mutex> lock { get_mutex() };
     FutureBase::wait(lock);
-    if (mState->mType.load(std::memory_order_acquire) == kDeferred)
+    if (mState->mType.load(std::memory_order_acquire) & Type::kDeferredFlag)
     {
       state_type * ptr = static_cast<state_type *>(mState);
       decltype(ptr->mFunction) func = std::move(ptr->mFunction);
       ptr->mFunction.~function();
       func();
+      lock.unlock();
       ptr->get_condition_variable().notify_all();
     }
   }
@@ -476,13 +483,13 @@ class promise : mingw_stdthread::detail::FutureBase
   {
     if (!valid())
       throw future_error(future_errc::no_state);
-    if (mState->mType.load(std::memory_order_relaxed) & kSetFlag)
+    if (mState->mType.load(std::memory_order_relaxed) & Type::kReadyFlag)
       throw future_error(future_errc::promise_already_satisfied);
   }
 
   void check_abandon (void)
   {
-    if (valid() && !(mState->mType.load(std::memory_order_relaxed) & kSetFlag))
+    if (valid() && !(mState->mType.load(std::memory_order_relaxed) & Type::kReadyFlag))
     {
       set_exception(std::make_exception_ptr(future_error(future_errc::broken_promise)));
     }
@@ -521,7 +528,7 @@ class promise : mingw_stdthread::detail::FutureBase
 
           {
             std::lock_guard<mingw_stdthread::mutex> guard (ptr->get_mutex());
-            ptr->mType.fetch_or(kReadyFlag, std::memory_order_relaxed);
+            ptr->mType.fetch_or(Type::kReadyFlag, std::memory_order_relaxed);
           }
           ptr->get_condition_variable().notify_all();
 
@@ -919,13 +926,8 @@ void swap(promise<T> & lhs, promise<T> & rhs) noexcept
 {
   lhs.swap(rhs);
 }
-
-template<class T, class Alloc>
-struct uses_allocator<promise<T>, Alloc> : std::true_type
-{
-};
-
 } //  Namespace "std"
+
 namespace mingw_stdthread
 {
 namespace detail
@@ -1120,12 +1122,12 @@ void swap(mingw_stdthread::promise<T> & lhs, mingw_stdthread::promise<T> & rhs) 
 {
   lhs.swap(rhs);
 }
-
-template<class T, class Alloc>
-struct uses_allocator<mingw_stdthread::promise<T>, Alloc> : std::true_type
-{
-};
 #endif
 } //  Namespace
+
+template<class T, class Alloc>
+struct std::uses_allocator<mingw_stdthread::promise<T>, Alloc> : ::std::true_type
+{
+};
 
 #endif // MINGW_FUTURE_H_

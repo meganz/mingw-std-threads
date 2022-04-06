@@ -216,21 +216,25 @@ void test_future ()
 
   { //  Part 1: Test whether `async` has correct return behavior.
     log("\tDeferring a function...");
-    auto async_deferred = async(launch::deferred, [] (void) -> T
+    auto async_deferred = async(launch::deferred, [] (thread::id other_id) -> T
       {
         std::hash<std::thread::id> hasher;
-        log("\t\tDeferred function called on thread %zu", hasher(std::this_thread::get_id()));
+        log("\t\tDeferred function called on thread %zu (expected %zu)", hasher(std::this_thread::get_id()), hasher(other_id));
+        if (std::this_thread::get_id() != other_id)
+          throw std::logic_error("Test failed. Function should have been deferred, but was asynchronous.");
         if (!is_void<T>::value)
           return T(test_int);
-      });
+      }, this_thread::get_id());
     log("\tCalling a function asynchronously...");
-    auto async_async = async(launch::async, [] (void) -> T
+    auto async_async = async(launch::async, [] (thread::id other_id) -> T
       {
         std::hash<std::thread::id> hasher;
-        log("\t\tAsynchronous function called on thread %zu", hasher(std::this_thread::get_id()));
+        log("\t\tAsynchronous function called on thread %zu (expected anything except %zu)", hasher(std::this_thread::get_id()), hasher(other_id));
+        if (std::this_thread::get_id() == other_id)
+          throw std::logic_error("Test failed. Function should have been asynchronous, but was deferred.");
         if (!is_void<T>::value)
           return T(test_int);
-      });
+      }, this_thread::get_id());
     log("\tLetting the implementation decide...");
     auto async_either = async([] (thread::id other_id) -> T
       {
