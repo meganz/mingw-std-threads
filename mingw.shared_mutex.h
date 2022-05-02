@@ -259,39 +259,95 @@ public:
     using Base::unlock_shared;
 
     template< class Clock, class Duration >
-    bool try_lock_until ( const std::chrono::time_point<Clock,Duration>& cutoff )
+    bool try_lock_until ( const std::chrono::time_point<Clock, Duration>& cutoff )
     {
+#if __cplusplus > 201703L
+	   static_assert(chrono::is_clock_v<Clock>);
+#endif
+	// The user-supplied clock may not tick at the same rate as
+	// steady_clock, so we must loop in order to guarantee that
+	// the timeout has expired before returning false.
+#if __cplusplus >= 201402L
+	    typename Clock::time_point __now = Clock::now();
+#endif
         do
         {
+#if __cplusplus >= 201402L
+	        auto rel_time = cutoff - __now;
+            if (try_lock(rel_time))
+#else
             if (try_lock())
+#endif
                 return true;
+#if __cplusplus >= 201402L
+	    __now = Clock::now();
+#endif
         }
+#if __cplusplus >= 201402L
+        while (cutoff > __now);
+#else
         while (std::chrono::steady_clock::now() < cutoff);
+#endif
         return false;
     }
 
     template< class Rep, class Period >
-    bool try_lock_for (const std::chrono::duration<Rep,Period>& rel_time)
+    bool try_lock_for (const std::chrono::duration<Rep, Period>& rel_time)
     {
+#if __cplusplus >= 201402L
+	    auto __rt = chrono::duration_cast<std::chrono::steady_clock::duration>(rel_time);
+	    if (ratio_greater<std::chrono::steady_clock::period, Period>())
+	        ++__rt;
+        return try_lock_until(std::chrono::steady_clock::now() + __rt);
+#else
         return try_lock_until(std::chrono::steady_clock::now() + rel_time);
+#endif
     }
 
     template< class Clock, class Duration >
-    bool try_lock_shared_until ( const std::chrono::time_point<Clock,Duration>& cutoff )
+    bool try_lock_shared_until ( const std::chrono::time_point<Clock, Duration>& cutoff )
     {
+#if __cplusplus > 201703L
+	   static_assert(chrono::is_clock_v<Clock>);
+#endif
+	// The user-supplied clock may not tick at the same rate as
+	// steady_clock, so we must loop in order to guarantee that
+	// the timeout has expired before returning false.
+#if __cplusplus >= 201402L
+	    typename Clock::time_point __now = Clock::now();
+#endif
         do
         {
+#if __cplusplus >= 201402L
+	        auto rel_time = cutoff - __now;
+            if (try_lock_shared(rel_time))
+#else
             if (try_lock_shared())
+#endif
                 return true;
+#if __cplusplus >= 201402L
+	        __now = Clock::now();
+#endif
         }
+#if __cplusplus >= 201402L
+        while (cutoff > __now);
+#else
         while (std::chrono::steady_clock::now() < cutoff);
+#endif
         return false;
     }
 
     template< class Rep, class Period >
-    bool try_lock_shared_for (const std::chrono::duration<Rep,Period>& rel_time)
+    bool try_lock_shared_for (const std::chrono::duration<Rep, Period>& rel_time)
     {
+#if __cplusplus >= 201402L
+	    auto __rt = chrono::duration_cast<std::chrono::steady_clock::duration>(rel_time);
+	    if (ratio_greater<std::chrono::steady_clock::period, Period>())
+	        ++__rt;
+	    return try_lock_shared_until(std::chrono::steady_clock::now() + __rt);
+#else
         return try_lock_shared_until(std::chrono::steady_clock::now() + rel_time);
+#endif
     }
 };
 
