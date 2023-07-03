@@ -4,12 +4,14 @@
   #include <mingw.condition_variable.h>
   #include <mingw.shared_mutex.h>
   #include <mingw.future.h>
+  #include <mingw.latch.h>
 #else
   #include <thread>
   #include <mutex>
   #include <condition_variable>
   #include <shared_mutex>
   #include <future>
+  #include <latch>
 #endif
 #include <atomic>
 #include <cassert>
@@ -293,6 +295,38 @@ void test_future ()
   test_future_get_value(async_member);
 }
 
+void test_latch ()
+{
+  std::latch latch(5);
+
+  std::thread thread1([&latch] { latch.wait(); });
+  std::thread thread2([&latch] { latch.arrive_and_wait(2); });
+
+  latch.count_down();
+
+  log("Testing count_down...");
+  latch.count_down(2);
+
+  thread1.join();
+  thread2.join();
+}
+
+void test_latch_release_wait ()
+{
+  std::latch latch(5);
+
+  std::thread thread1([&latch] { latch.wait(); });
+  std::thread thread2([&latch] { latch.arrive_and_wait(2); });
+
+  latch.count_down();
+
+  log("Testing release_wait...");
+  latch.arrive_and_wait(2);
+
+  thread1.join();
+  thread2.join();
+}
+
 #define TEST_SL_MV_CPY(ClassName) \
     static_assert(std::is_standard_layout<ClassName>::value, \
                   "ClassName does not satisfy concept StandardLayoutType."); \
@@ -480,6 +514,12 @@ int main()
       log("Testing <future>'s use of allocators. Should allocate, then deallocate.");
       promise<int> allocated_promise (std::allocator_arg, CustomAllocator<unsigned>());
       allocated_promise.set_value(7);
+    }
+
+    {
+      log("Testing implementation of <latch>...");
+      test_latch();
+      test_latch_release_wait();
     }
 
     return failure_count.load() != 0;
