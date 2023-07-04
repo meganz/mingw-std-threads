@@ -51,7 +51,7 @@ public:
     latch(const latch&)=delete;
     latch& operator=(const latch&)=delete;
 
-    void count_down(std::ptrdiff_t update = 1 )
+    void count_down(std::ptrdiff_t update = 1)
     {
         assert(update >= 0);
 
