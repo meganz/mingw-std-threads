@@ -4,14 +4,22 @@
   #include <mingw.condition_variable.h>
   #include <mingw.shared_mutex.h>
   #include <mingw.future.h>
-  #include <mingw.latch.h>
+
+  #if defined(__cplusplus) && (__cplusplus >= 202002L)
+    #include <mingw.latch.h>
+  #endif
+
 #else
   #include <thread>
   #include <mutex>
   #include <condition_variable>
   #include <shared_mutex>
   #include <future>
-  #include <latch>
+
+  #if defined(__cplusplus) && (__cplusplus >= 202002L)
+    #include <latch>
+  #endif
+
 #endif
 #include <atomic>
 #include <cassert>
@@ -36,7 +44,7 @@ std::atomic<unsigned long long> failure_count {0};
 template<class ... Args>
 void log_error (char const * fmtString, Args ...args) {
   ++failure_count;
-   printf("%s", "ERROR: ");
+  printf("%s", "ERROR: ");
   printf(fmtString, args...);
   printf("%s", "\n");
   fflush(stdout);
@@ -295,6 +303,8 @@ void test_future ()
   test_future_get_value(async_member);
 }
 
+#if defined(__cplusplus) && (__cplusplus >= 202002L)
+
 void test_latch ()
 {
   std::latch latch(5);
@@ -323,9 +333,25 @@ void test_latch_release_wait ()
   log("Testing release_wait...");
   latch.arrive_and_wait(2);
 
+  log("Testing try_wait...");
+  if (!latch.try_wait())
+  {
+    log_error("try_wait did not return true even though the internal counter should have reached 0");
+  }
+
   thread1.join();
   thread2.join();
 }
+
+void test_latch_noexcept()
+{
+  static_assert(noexcept(std::latch::max()));
+  static_assert(noexcept(std::latch::latch()));
+  static_assert(noexcept(std::latch::try_wait()));
+  static_assert(noexcept(std::latch::arrive_and_wait()));
+}
+
+#endif // defined(__cplusplus) && (__cplusplus >= 202002L)
 
 #define TEST_SL_MV_CPY(ClassName) \
     static_assert(std::is_standard_layout<ClassName>::value, \
@@ -516,11 +542,14 @@ int main()
       allocated_promise.set_value(7);
     }
 
+#if defined(__cplusplus) && (__cplusplus >= 202002L)
     {
       log("Testing implementation of <latch>...");
       test_latch();
       test_latch_release_wait();
+      test_latch_noexcept();
     }
+#endif
 
     return failure_count.load() != 0;
 }

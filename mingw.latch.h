@@ -27,11 +27,6 @@
 #error The contents of <latch> require a C++20 compiler!
 #endif
 
-#include <sdkddkver.h>    //  Detect Windows version
-#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0501)
-#error To use the MinGW-std-threads library, you will need to define the macro _WIN32_WINNT to be 0x0501 (Windows XP) or higher.
-#endif
-
 #include <atomic>
 #include <cassert>        // for descriptive errors
 #include <cstddef>        // for std::ptrdiff_t
@@ -47,8 +42,9 @@ public:
         return std::numeric_limits<std::ptrdiff_t>::max();
     }
 
-    constexpr explicit latch(std::ptrdiff_t expected) : mCounter{expected}
+    constexpr explicit latch(std::ptrdiff_t expected) noexcept : mCounter{expected}
     {
+        assert(expected >= 0);
     }
 
     ~latch()=default;
@@ -59,8 +55,11 @@ public:
     {
         assert(update >= 0);
 
-        const auto current = mCounter.fetch_sub(update, std::memory_order_release) - update;
-        if (current == 0)
+        const auto current = mCounter.fetch_sub(update, std::memory_order_release);
+
+        assert(update <= current);
+
+        if (current <= update)
         {
             mCounter.notify_all();
         }
@@ -68,26 +67,36 @@ public:
 
     [[nodiscard]] bool try_wait() const noexcept
     {
-        return 0 == mCounter.load(std::memory_order_acquire);
+        return mCounter.load(std::memory_order_acquire) <= 0;
     }
 
+    /**
+    * The call to atomic::wait() may unblock with a non-zero counter in some edge cases (see GH-91 for an in-depth explanation)
+    * To address the edge cases this loop will continue to wait until the counter has been verified to have reached a non-positive value
+    */         
     void wait() const
     {
-        const auto current = mCounter.load(std::memory_order_acquire);
-        if (current == 0)
+        while (true)
         {
-            return;
-        }
+            const auto current = mCounter.load(std::memory_order_acquire);
+            if (current < 0)
+            {
+                return;
+            }
 
-        mCounter.wait(current, std::memory_order_relaxed);
+            mCounter.wait(current, std::memory_order_relaxed);
+        }
     }
 
     void arrive_and_wait(const std::ptrdiff_t update = 1) noexcept
     {
         assert(update >= 0);
 
-        const auto current = mCounter.fetch_sub(update, std::memory_order_acq_rel) - update;
-        if (current == 0)
+        const auto current = mCounter.fetch_sub(update, std::memory_order_acq_rel);
+
+        assert(current <= update);
+
+        if (current == update)
         {
             mCounter.notify_all();
         }
@@ -95,7 +104,7 @@ public:
         {
             assert(current > 0);
 
-            mCounter.wait(current, std::memory_order_relaxed);
+            mCounter.wait(current - update, std::memory_order_relaxed);
             wait();
         }
     }
