@@ -72,14 +72,14 @@ public:
 
     /**
     * The call to atomic::wait() may unblock with a non-zero counter in some edge cases (see GH-91 for an in-depth explanation)
-    * To address the edge cases this loop will continue to wait until the counter has been verified to have reached a non-positive value
+    * To address the edge cases this loop will continue to wait until the counter has been verified to have reached 0 (or less)
     */         
     void wait() const
     {
         while (true)
         {
             const auto current = mCounter.load(std::memory_order_acquire);
-            if (current < 0)
+            if (current <= 0)
             {
                 return;
             }
