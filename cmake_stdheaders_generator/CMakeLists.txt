@@ -61,6 +61,8 @@ endif()
 generate_mingw_stdthreads_header(condition_variable "${MINGW_STDTHREADS_DIR}")
 # <future>
 generate_mingw_stdthreads_header(future "${MINGW_STDTHREADS_DIR}")
+# <latch>
+generate_mingw_stdthreads_header(latch "${MINGW_STDTHREADS_DIR}")
 # <mutex>
 generate_mingw_stdthreads_header(mutex "${MINGW_STDTHREADS_DIR}")
 # <shared_mutex>

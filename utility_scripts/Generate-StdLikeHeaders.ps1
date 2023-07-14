@@ -62,7 +62,7 @@ param (
 $ErrorActionPreference = "Stop";
 
 # headers to be generated
-$headers = @("condition_variable", "future", "mutex", "shared_mutex", "thread")
+$headers = @("condition_variable", "future", "latch", "mutex", "shared_mutex", "thread")
 
 # ask for user input in interactive mode
 if ($Interactive) {
