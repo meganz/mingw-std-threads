@@ -10,10 +10,11 @@
     Path to mingw-std-threads folder. Will try to use $PSScriptRoot/.. if not 
     specified.
 .PARAMETER DestinationFolder
-    Destination folder where generated headers will be saved to
+    Destination folder where generated headers will be saved to. Will try to
+    use ./output if not specified.
 .PARAMETER GenerateCompilerWrapperWithFileName
     If specified, will be generated a wrapper batch script for g++ which automatically
-    adds $DestinationFolder as an include path
+    adds Destination Folder as an include path
 .PARAMETER Interactive
     Use this switch if you want to pass parameters interactively
 #>
@@ -23,7 +24,7 @@ param (
     [Parameter(Mandatory = $false,
         ValueFromPipelineByPropertyName = $true,
         ParameterSetName = "NonInteractive",
-        HelpMessage = "Pathtof GCC. Will try to use the default one from `$env:Path if not specified.")]
+        HelpMessage = "Path to GCC. Will try to use the default one from `$env:Path if not specified.")]
     [string]
     $GccPath,
     
@@ -39,21 +40,22 @@ param (
     [Parameter(Mandatory = $true,
         ValueFromPipelineByPropertyName = $true,
         ParameterSetName = "NonInteractive",
-        HelpMessage = "Destination folder where generated headers will be saved to")]
-    [ValidateNotNullOrEmpty()]
+        HelpMessage = "Destination folder where generated headers will be saved to. Will try to use ./output if not specified.")]
     [string]
-    $DestinationFolder,
+    $DestinationFolder = "./output",
 
     # Compiler wrapper path
     [Parameter(Mandatory = $false,
         ValueFromPipelineByPropertyName = $true,
         ParameterSetName = "NonInteractive",
-        HelpMessage = "If specified, will generate a wrapper batch script for g++ which automatically adds `$DestinationFolder as an include path")]
+        HelpMessage = "If specified, will generate a wrapper batch script for g++ which automatically adds Destination Folder as an include path")]
     [string]
     $GenerateCompilerWrapperWithFileName,
 
     # Interactive Switch
-    [Parameter(ParameterSetName = "Interactive")]
+    [Parameter(
+        ParameterSetName = "Interactive",
+        HelpMessage = "If specified, will generate interactively")]
     [switch]
     $Interactive = $false
 )
@@ -62,7 +64,7 @@ param (
 $ErrorActionPreference = "Stop";
 
 # headers to be generated
-$headers = @("condition_variable", "future", "latch", "mutex", "shared_mutex", "thread")
+$headers = @("condition_variable", "invoke", "latch", "future", "mutex", "shared_mutex", "thread")
 
 # ask for user input in interactive mode
 if ($Interactive) {
@@ -72,11 +74,23 @@ if ($Interactive) {
     $DestinationFolder = Read-Host -Prompt "Destination folder into which headers will be generated"
     $GccPath = Read-Host -Prompt "Path to GCC, optional. Press Enter to let it be retrieved from PATH"
     $MinGWStdThreadsPath = Read-Host -Prompt "Path to mingw-std-threads folder, optional. Press Enter to use default value"
-    $GenerateCompilerWrapperWithFileName = Read-Host "Optional path to which a wrapper batch script for g++ will be created. It will automatically use $DestinationFolder as an include path. Press Enter to skip"
+    $GenerateCompilerWrapperWithFileName = Read-Host "Optional path to which a wrapper batch script for g++ will be created. It will automatically use Destination Folder as an include path. Press Enter to skip"
 }
 
+
+# set default value of $GenerateCompilerWrapperWithFileName
+if (-not $GenerateCompilerWrapperWithFileName) {
+    $GenerateCompilerWrapperWithFileName = ""
+}
+
+# set default value of $GccPath
 if (-not $GccPath) {
     $GccPath = "gcc"
+}
+
+# set default value of $DestinationFolder
+if (-not $DestinationFolder) {
+    $DestinationFolder = "."
 }
 
 # set default value of $MinGWStdThreadsPath
@@ -125,8 +139,8 @@ try {
     $gcc.StartInfo = $processStartInfo
     $gcc.Start() | Out-Null
     $gcc.StandardInput.Close()
-    $gcc.WaitForExit()
     $output = $gcc.StandardError.ReadToEnd()
+    $gcc.WaitForExit()
     $outputLines = $output -split "[\r\n]" | 
         ForEach-Object { return $_.Trim() } |
         Where-Object { return $_.Length -gt 0 }
@@ -156,12 +170,12 @@ foreach ($line in $outputLines) {
 }
 
 if ($includePaths.Count -eq 0) {
-    Write-Error "Error: didn't find any #inlcude <...> search paths"
+    Write-Error "Error: didn't find any #include <...> search paths"
 }
 
 # look for std header paths
 Write-Output "Searching for standard headers..."
-$stdHeaders = @()
+$stdHeaders = @{}
 # set a label called "nextHeader" to allow continue with outer loop
 :nextHeader foreach ($header in $headers) {
     # check if mingw-std-threads headers exist
@@ -171,32 +185,40 @@ $stdHeaders = @()
         Write-Error "Error: mingw-std-threads header not found: $myHeader"
     }
 
+    $stdHeaders[$header] = $header
+
     foreach ($inludePath in $includePaths) {
         $fullPath = Join-Path -Path $inludePath -ChildPath $header
         if (Test-Path -LiteralPath $fullPath -PathType "Leaf") {
             $fullPath = (Get-Item -LiteralPath $fullPath).FullName
-            $stdHeaders += $fullPath
+            $stdHeaders[$header] = $fullPath
             Write-Output "Found std header: $fullPath"
             # if found matching header, continue with outer loop
             continue nextHeader
         }
     }
 
-    Write-Error "Error: didn't find $header in any search paths"
+    Write-Output "Warning: didn't find $header in any search paths"
 }
 
 # generate headers
 Write-Output "Generating headers..."
-foreach ($stdHeader in $stdHeaders) {
-    $headerFileName = (Get-Item -LiteralPath $stdHeader).Name
+foreach ($stdHeader in $stdHeaders.Keys) {
+    $headerFileName = $stdHeader
+    $headerFilePath = $stdHeader
+    if($stdHeader -ne $stdHeaders[$stdHeader]) {
+        $headerFilePath = (Get-Item -LiteralPath $stdHeaders[$stdHeader]).FullName
+    }
     $myHeader = "mingw.$headerFileName.h"
     $myHeader = Join-Path -Path $MinGWStdThreadsPath -ChildPath $myHeader
-    Write-Output "Generating <$headerFileName> from $myHeader and $stdHeader..."
+    Write-Output "Generating <$headerFileName> from $myHeader and $headerFilePath..."
 
     # both two headers should already have include guards
     # but we still add a #pragma once just to be safe
     $content = "#pragma once`r`n"
-    $content += "#include `"$stdHeader`"`r`n"
+    if ($headerFilePath -ne $stdHeader) {
+        $content += "#include `"$headerFilePath`"`r`n"
+    }
     $content += "#include `"$myHeader`"`r`n";
 
     $outputFileName = Join-Path -Path $DestinationFolder -ChildPath $headerFileName
